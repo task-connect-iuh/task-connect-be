@@ -1,0 +1,109 @@
+name: task-connect
+
+services:
+  mariadb:
+    image: mariadb:11.4
+    container_name: taskconnect-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: taskconnect
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "${MARIADB_PORT}:3306"
+    volumes:
+      # MARIADB_DATABASE o tren tu tao database "taskconnect" va GRANT cho MARIADB_USER
+      # luc container khoi tao lan dau. Chi chay khi volume mariadb-data con trong.
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - taskconnect-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: taskconnect-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - taskconnect-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: taskconnect-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "${RABBITMQ_PORT}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT}:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - taskconnect-net
+
+  # Flyway CLI dung de chay migration bang tay: migrate, info, validate, repair.
+  # Nam trong profile "migrate" nen KHONG tu chay khi "docker compose up".
+  # Ly do: ung dung Spring Boot cung chay Flyway luc khoi dong. De ca hai cung
+  # tu chay se dam nhau tren bang flyway_schema_history.
+  #
+  #   docker compose --profile migrate run --rm flyway info
+  #   docker compose --profile migrate run --rm flyway migrate
+  #
+  # Muon giao han viec migrate cho container nay thay vi cho app:
+  # dat spring.flyway.enabled=false trong application.yml.
+  flyway:
+    image: flyway/flyway:11-alpine
+    container_name: taskconnect-flyway
+    profiles: ["migrate"]
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      # Mot database duy nhat "taskconnect", moi module so huu mot nhom bang rieng
+      # phan biet bang tien to ten bang (auth_, user_...). Xem 12-database.md.
+      FLYWAY_URL: jdbc:mariadb://mariadb:3306/taskconnect
+      FLYWAY_USER: ${MARIADB_USER}
+      FLYWAY_PASSWORD: ${MARIADB_PASSWORD}
+      FLYWAY_SCHEMAS: taskconnect
+      FLYWAY_BASELINE_ON_MIGRATE: "true"
+      FLYWAY_VALIDATE_MIGRATION_NAMING: "true"
+      FLYWAY_CLEAN_DISABLED: "true"
+    volumes:
+      - ./src/main/resources/db/migration:/flyway/sql:ro
+    networks:
+      - taskconnect-net
+
+volumes:
+  mariadb-data:
+  redis-data:
+  rabbitmq-data:
+
+networks:
+  taskconnect-net:
+    driver: bridge
