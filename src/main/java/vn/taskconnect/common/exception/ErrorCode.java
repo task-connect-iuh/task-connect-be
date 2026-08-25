@@ -40,8 +40,22 @@ public enum ErrorCode {
     // --- AUTH ---
     EMAIL_EXISTS("AUTH-409-EMAIL_EXISTS", HttpStatus.CONFLICT,
             "Email này đã được đăng ký."),
+    PHONE_EXISTS("AUTH-409-PHONE_EXISTS", HttpStatus.CONFLICT,
+            "Số điện thoại này đã được đăng ký."),
     ACCOUNT_LOCKED("AUTH-423-ACCOUNT_LOCKED", HttpStatus.LOCKED,
             "Tài khoản đang bị khoá tạm thời."),
+    ACCOUNT_SUSPENDED("AUTH-403-ACCOUNT_SUSPENDED", HttpStatus.FORBIDDEN,
+            "Tài khoản đã bị đình chỉ."),
+    INVALID_CREDENTIALS("AUTH-401-INVALID_CREDENTIALS", HttpStatus.UNAUTHORIZED,
+            "Email hoặc mật khẩu không đúng."),
+    INVALID_REFRESH_TOKEN("AUTH-401-INVALID_REFRESH_TOKEN", HttpStatus.UNAUTHORIZED,
+            "Phiên đăng nhập không hợp lệ, vui lòng đăng nhập lại."),
+    INVALID_VERIFICATION_OTP("AUTH-400-INVALID_VERIFICATION_OTP", HttpStatus.BAD_REQUEST,
+            "Mã xác minh không đúng. Bạn có thể nhập lại hoặc yêu cầu mã mới."),
+    EXPIRED_VERIFICATION_OTP("AUTH-410-EXPIRED_VERIFICATION_OTP", HttpStatus.GONE,
+            "Mã xác minh đã hết hạn. Bạn có thể yêu cầu mã mới."),
+    TOO_MANY_OTP_ATTEMPTS("AUTH-429-TOO_MANY_OTP_ATTEMPTS", HttpStatus.TOO_MANY_REQUESTS,
+            "Bạn đã nhập sai mã quá nhiều lần. Mã hiện tại không còn hiệu lực, hãy yêu cầu mã mới."),
 
     // --- USR ---
     MISSING_OPERATING_AREA("USR-400-MISSING_OPERATING_AREA", HttpStatus.BAD_REQUEST,
