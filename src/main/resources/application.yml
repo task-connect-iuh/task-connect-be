@@ -3,9 +3,11 @@ spring:
     name: task-connect
 
   datasource:
-    url: jdbc:mariadb://${DB_HOST:localhost}:${DB_PORT:3307}/${DB_NAME:taskconnect}
+    url: jdbc:mariadb://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:taskconnect}
     username: ${DB_USER:taskconnect}
-    password: ${DB_PASSWORD:taskconnect}
+    # Bat buoc set qua bien moi truong (.env o dev, secret manager o production).
+    # Khong dat default de app fail-fast khi thieu, tranh chay bang mat khau dev.
+    password: ${DB_PASSWORD}
     driver-class-name: org.mariadb.jdbc.Driver
     hikari:
       pool-name: taskconnect-pool
@@ -38,12 +40,62 @@ spring:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:admin}
-    password: ${RABBITMQ_PASSWORD:admin}
+    # Khong dat default: admin/admin lot len production la tham hoa.
+    password: ${RABBITMQ_PASSWORD}
+
+  mail:
+    host: ${MAIL_HOST:smtp-relay.brevo.com}
+    port: ${MAIL_PORT:587}
+    # Khac voi DB_PASSWORD/JWT_SECRET o tren, hai bien nay CO default rong. Ly do: app
+    # phai khoi dong duoc o may dev khi chua co API key Brevo (app.mail.enabled=false).
+    # Fail-fast van con, nhung chuyen xuong SmtpEmailSender.@PostConstruct - bean do chi
+    # ton tai khi app.mail.enabled=true va nem IllegalStateException ngay luc khoi tao
+    # neu thieu username/password. Dat ${MAIL_PASSWORD} khong default o day se sap
+    # context o moi may dev chua co key, vi Spring resolve placeholder luc bind bat ke
+    # bean mail co duoc tao hay khong.
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          # Bat buoc. Thieu timeout thi mot ket noi treo toi Brevo giu luon mot luong
+          # trong notificationExecutor vo thoi han va lam nghen ca hang doi mail.
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
 
   jackson:
     default-property-inclusion: non_null
     serialization:
       write-dates-as-timestamps: false
+
+app:
+  mail:
+    enabled: ${MAIL_ENABLED:false}
+    # Phai la dia chi da xac minh trong Brevo (Senders & IP), neu khong relay tra 550.
+    from-address: ${MAIL_FROM_ADDRESS:no-reply@taskconnect.vn}
+    from-name: ${MAIL_FROM_NAME:TaskConnect}
+
+  jwt:
+    # Bat buoc set qua bien moi truong, toi thieu 32 ky tu (xem .env.example).
+    # KHONG dat gia tri default o day: neu production quen set bien, app phai sap
+    # ngay luc khoi dong thay vi im lang ky token bang secret nam cong khai trong repo.
+    # Sinh secret moi: openssl rand -base64 48
+    secret: ${JWT_SECRET}
+    access-token-ttl-minutes: ${JWT_ACCESS_TOKEN_TTL_MINUTES:15}
+    refresh-token-ttl-days: ${JWT_REFRESH_TOKEN_TTL_DAYS:30}
+    # Secure=true bat buoc khi len production (cookie chi gui qua HTTPS). Mac dinh false
+    # de dev chay duoc tren http://localhost khong co HTTPS.
+    refresh-cookie-secure: ${JWT_REFRESH_COOKIE_SECURE:false}
+
+  cors:
+    # Domain FE duoc phep goi API kem cookie (Access-Control-Allow-Credentials=true doi
+    # hoi origin cu the, khong duoc dung "*"). Doi sang domain that khi len production.
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
 
 server:
   port: ${SERVER_PORT:8080}
@@ -66,6 +118,12 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+  health:
+    mail:
+      # Mac dinh Actuator mo mot ket noi SMTP that moi lan goi /actuator/health, ma
+      # endpoint do dang public trong SecurityConfig. Se lam health check cham va bao
+      # DOWN o may dev chua co key Brevo.
+      enabled: false
 
 logging:
   level:

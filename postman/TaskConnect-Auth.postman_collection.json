@@ -1,0 +1,181 @@
+{
+  "info": {
+    "name": "TaskConnect - Auth Module",
+    "description": "Test luong dang ky / dang nhap / xac minh email / refresh / logout cua module Auth. Xem task-connect-be/postman/README.md (huong dan trong chat) de biet thu tu chay. Refresh token nam trong cookie httpOnly (Set-Cookie tu login/register), Postman tu luu va gui lai cookie theo domain - khong can bien collection nao cho no.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080" },
+    { "key": "email", "value": "postman-test@example.com" },
+    { "key": "password", "value": "Password123!" },
+    { "key": "access_token", "value": "" },
+    { "key": "verify_token", "value": "PASTE_TOKEN_TU_APP.LOG_VAO_DAY" }
+  ],
+  "item": [
+    {
+      "name": "1. Register",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"confirmPassword\": \"{{password}}\",\n  \"roles\": [\"TASK_POSTER\"]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/register",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "auth", "register"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const data = pm.response.json().data;",
+              "    pm.collectionVariables.set('access_token', data.accessToken);",
+              "    console.log('accountId=' + data.accountId + ' status=' + data.status);",
+              "    console.log('Vao app.log tim dong \"Token xac minh email cho account ' + data.accountId + '\" de lay verify_token');",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "1b. Register - Duplicate Email (expect 409)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"confirmPassword\": \"{{password}}\",\n  \"roles\": [\"TASK_POSTER\"]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/register",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "auth", "register"]
+        }
+      }
+    },
+    {
+      "name": "2. Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/login",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "auth", "login"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const data = pm.response.json().data;",
+              "    pm.collectionVariables.set('access_token', data.accessToken);",
+              "    console.log('status=' + data.status);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2b. Login - Wrong Password (chay lai 5-6 lan de test khoa)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"SaiMatKhau!\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/login",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "3. Verify Email",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{verify_token}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/verify-email",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "auth", "verify-email"]
+        }
+      }
+    },
+    {
+      "name": "4. Resend Verification",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/resend-verification",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "auth", "resend-verification"]
+        }
+      }
+    },
+    {
+      "name": "5. Refresh Token",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/refresh",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "auth", "refresh"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const data = pm.response.json().data;",
+              "    pm.collectionVariables.set('access_token', data.accessToken);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Logout",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/logout",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "auth", "logout"]
+        }
+      }
+    }
+  ]
+}

@@ -2,6 +2,7 @@ package vn.taskconnect;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 /**
  * Diem khoi dong duy nhat cua he thong.
@@ -11,6 +12,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * bang interface Java noi bo, khong qua HTTP.
  */
 @SpringBootApplication
+@ConfigurationPropertiesScan
 public class TaskConnectApplication {
 
     public static void main(String[] args) {

@@ -37,8 +37,10 @@ Cong bi trung tren may thi doi trong `.env`, khong sua `docker-compose.yml`.
 ## Migration
 
 Flyway chay tu dong khi ung dung khoi dong, doc tu
-`src/main/resources/db/migration`. Hien co `V1__create_auth_tables.sql` (module Auth) va
-`V2__create_user_tables.sql` (module User).
+`src/main/resources/db/migration`. Hien co `V1__create_auth_tables.sql` (module Auth),
+`V2__create_user_tables.sql` (module User), va
+`V3__add_otp_to_email_verification_tokens.sql` (doi xac minh email tu token dang lien
+ket sang ma OTP 6 chu so).
 
 Muon chay bang tay bang Flyway CLI trong container:
 
@@ -59,27 +61,33 @@ migration moi de len.
 vn.taskconnect
 ├── TaskConnectApplication.java
 ├── common/
-│   ├── exception/      BusinessException, ErrorCode, GlobalExceptionHandler
-│   └── response/       ApiResponse
-├── security/           SecurityConfig
+│   ├── config/          TimeConfig (bean Clock, dung chung)
+│   ├── exception/        BusinessException, ErrorCode, GlobalExceptionHandler
+│   └── response/         ApiResponse
+├── security/             SecurityConfig, JWT filter, rate limit
 ├── auth/
-│   ├── api/            interface va DTO cong khai, module khac chi import tu day
+│   ├── api/               interface va DTO cong khai, module khac chi import tu day
+│   │   └── event/         su kien Spring noi bo (vd EmailVerificationRequestedEvent)
 │   ├── controller/
 │   ├── service/
 │   ├── entity/
 │   ├── repository/
-│   ├── dto/{request,response}/
-│   └── infrastructure/
-└── user/               cung bo thu muc nhu auth
+│   └── dto/{request,response}/
+├── user/                  cung bo thu muc nhu auth
+└── notification/          gui email (Brevo SMTP relay qua JavaMailSender)
+    ├── api/                NotificationFacade + DTO lien module
+    ├── service/            NotificationFacadeImpl
+    └── infrastructure/     EmailSender, template, cau hinh mail, listener
 ```
 
 `entity/` va `repository/` nam ngang hang `controller/` va `service/`, khong nam trong
 `domain/`.
 
 Package `api/` la mat cong khai duy nhat cua module. Module khac chi duoc import tu do,
-khong import entity, khong inject repository cua module khac.
+khong import entity, khong inject repository cua module khac. Auth publish su kien Spring
+noi bo (khong qua RabbitMQ) khi can gui email, module Notification lang nghe va gui that.
 
-Chin module con lai (task, matching, booking, payment, review, chat, notification, admin, ai)
+Tam module con lai (task, matching, booking, payment, review, chat, admin, ai)
 se duoc tao khi bat tay vao lam, theo dung bo thu muc tren.
 
 ## Hop dong phan hoi
@@ -105,7 +113,19 @@ that cua phan hoi, vi ma HTTP duoc lay tu chinh `ErrorCode`.
 Service nem `BusinessException`, khong tu dung `ResponseEntity` loi.
 `GlobalExceptionHandler` la noi duy nhat bien exception thanh phan hoi.
 
+## Xac minh email bang OTP
+
+Dang ky xong, tai khoan o trang thai `UNVERIFIED` va nhan mot email chua ma OTP 6 chu
+so, hieu luc 5 phut. `POST /api/v1/auth/verify-email` nhan `{email, otp}`. Nhap sai qua
+5 lan thi ma bi vo hieu hoa, phai xin ma moi qua `POST /api/v1/auth/resend-verification`
+(chi duoc goi lai sau 60 giay ke tu lan gan nhat, goi lai se vo hieu hoa ma cu).
+
+Gui that qua Brevo SMTP relay (`app.mail.enabled=true`, xem `.env.example`). O may dev
+chua co API key, de `MAIL_ENABLED=false` (mac dinh): ung dung van chay va sinh ma binh
+thuong, chi khong co email nao ra ngoai.
+
 ## Chua co, se bo sung sau
 
-JWT va filter xac thuc, rate limit, cau hinh Redis va RabbitMQ chi tiet, gui email,
-cau hinh OpenAPI.
+Cau hinh Redis va RabbitMQ chi tiet cho cac luong nghiep vu khac, cau hinh OpenAPI,
+outbox pattern cho luong thong bao (hien Auth publish su kien Spring noi bo, chua qua
+RabbitMQ - xem Javadoc EmailVerificationRequestedEvent).

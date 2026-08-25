@@ -1,0 +1,6 @@
+spring:
+  main:
+    # SyncMailTestConfig dinh nghia lai bean "notificationExecutor" (cung ten voi bean
+    # that trong NotificationAsyncConfig) de @Async chay dong bo trong test, khong can
+    # Awaitility hay Thread.sleep (rule 40 cam Thread.sleep).
+    allow-bean-definition-overriding: true
