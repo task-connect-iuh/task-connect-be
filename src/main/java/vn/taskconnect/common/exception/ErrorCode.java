@@ -60,6 +60,10 @@ public enum ErrorCode {
     // --- USR ---
     MISSING_OPERATING_AREA("USR-400-MISSING_OPERATING_AREA", HttpStatus.BAD_REQUEST,
             "Bạn chưa khai báo khu vực hoạt động."),
+    PROFILE_NOT_FOUND("USR-404-PROFILE_NOT_FOUND", HttpStatus.NOT_FOUND,
+            "Chưa có hồ sơ cá nhân nào được tạo cho tài khoản này."),
+    MISSING_FULL_NAME("USR-400-MISSING_FULL_NAME", HttpStatus.BAD_REQUEST,
+            "Bạn chưa khai báo họ tên."),
 
     // --- TSK ---
     MISSING_LOCATION("TSK-400-MISSING_LOCATION", HttpStatus.BAD_REQUEST,

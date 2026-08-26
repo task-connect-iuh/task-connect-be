@@ -31,7 +31,7 @@ class AuthServiceOtpGenerationTest {
                 mock(AuthEmailVerificationTokenRepository.class),
                 mock(PasswordEncoder.class),
                 mock(JwtTokenProvider.class),
-                new JwtProperties("test-secret", 15, 30),
+                new JwtProperties("test-secret", 15, 30, false),
                 mock(ApplicationEventPublisher.class),
                 Clock.systemUTC());
     }
