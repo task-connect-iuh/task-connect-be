@@ -97,6 +97,12 @@ app:
     # hoi origin cu the, khong duoc dung "*"). Doi sang domain that khi len production.
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
 
+  crypto:
+    # Bat buoc set qua bien moi truong. Khac JWT_SECRET (chi ky, xoay vong duoc), khoa nay
+    # ma hoa du lieu luu lau dai (CCCD, chung chi) - doi khoa se khong giai ma duoc du lieu
+    # cu, nen KHONG duoc de trong o bat ky moi truong nao. Sinh khoa moi: openssl rand -base64 32
+    key: ${APP_CRYPTO_KEY}
+
 aws:
   s3:
     # Bat buoc set qua bien moi truong, khong dat default: sai bucket/khoa se upload
