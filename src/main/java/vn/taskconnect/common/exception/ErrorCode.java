@@ -64,6 +64,8 @@ public enum ErrorCode {
             "Chưa có hồ sơ cá nhân nào được tạo cho tài khoản này."),
     MISSING_FULL_NAME("USR-400-MISSING_FULL_NAME", HttpStatus.BAD_REQUEST,
             "Bạn chưa khai báo họ tên."),
+    UNSUPPORTED_AVATAR_TYPE("USR-400-UNSUPPORTED_AVATAR_TYPE", HttpStatus.BAD_REQUEST,
+            "Định dạng ảnh không được hỗ trợ. Chỉ chấp nhận JPEG, PNG hoặc WEBP."),
 
     // --- TSK ---
     MISSING_LOCATION("TSK-400-MISSING_LOCATION", HttpStatus.BAD_REQUEST,

@@ -7,14 +7,18 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import vn.taskconnect.common.response.ApiResponse;
 import vn.taskconnect.security.jwt.AuthenticatedPrincipal;
+import vn.taskconnect.user.dto.request.AvatarUploadUrlRequest;
 import vn.taskconnect.user.dto.request.UpdateProfileRequest;
+import vn.taskconnect.user.dto.response.AvatarUploadUrlResponse;
 import vn.taskconnect.user.dto.response.ProfileResponse;
 import vn.taskconnect.user.dto.response.PublicProfileResponse;
+import vn.taskconnect.user.service.AvatarUploadService;
 import vn.taskconnect.user.service.UserProfileService;
 
 /**
@@ -27,9 +31,11 @@ import vn.taskconnect.user.service.UserProfileService;
 public class UserProfileController {
 
     private final UserProfileService profileService;
+    private final AvatarUploadService avatarUploadService;
 
-    public UserProfileController(UserProfileService profileService) {
+    public UserProfileController(UserProfileService profileService, AvatarUploadService avatarUploadService) {
         this.profileService = profileService;
+        this.avatarUploadService = avatarUploadService;
     }
 
     /** Xem ho so cua chinh minh. Moi tai khoan da dang nhap deu duoc xem ho so cua chinh no. */
@@ -56,5 +62,18 @@ public class UserProfileController {
     @PreAuthorize("isAuthenticated()")
     public ApiResponse<PublicProfileResponse> getPublicProfile(@PathVariable UUID accountId) {
         return ApiResponse.ok(PublicProfileResponse.from(profileService.getPublicProfile(accountId)));
+    }
+
+    /**
+     * Xin presigned URL de tu tai anh dai dien len S3 truc tiep tu client, khong qua
+     * backend. Sau khi PUT thanh cong len uploadUrl tra ve, client goi PATCH /users/me voi
+     * avatarUrl = publicUrl de luu lai. Xem docs/adr/ADR-003-avatar-storage-s3-presigned-upload.md.
+     */
+    @PostMapping("/me/avatar-upload-url")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<AvatarUploadUrlResponse> createAvatarUploadUrl(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @Valid @RequestBody AvatarUploadUrlRequest request) {
+        return ApiResponse.ok(avatarUploadService.createUploadUrl(principal.accountId(), request));
     }
 }

@@ -21,6 +21,7 @@ import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.user.dto.request.UpdateProfileRequest;
 import vn.taskconnect.user.entity.UserProfile;
+import vn.taskconnect.user.repository.ServiceCategoryRepository;
 import vn.taskconnect.user.repository.UserProfileRepository;
 
 /**
@@ -188,7 +189,7 @@ class UserProfileServiceTest {
     // UC03-09: UserFacade.findProfile khi chua co ho so -> Optional rong, khong throw.
     @Test
     void should_returnEmptyOptional_when_facadeFindsNoProfile() {
-        UserFacadeImpl facade = new UserFacadeImpl(repository);
+        UserFacadeImpl facade = new UserFacadeImpl(repository, mock(ServiceCategoryRepository.class));
         when(repository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
 
         assertThat(facade.findProfile(ACCOUNT_ID)).isEmpty();
