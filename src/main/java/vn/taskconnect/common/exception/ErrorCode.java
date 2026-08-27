@@ -66,6 +66,16 @@ public enum ErrorCode {
             "Bạn chưa khai báo họ tên."),
     UNSUPPORTED_AVATAR_TYPE("USR-400-UNSUPPORTED_AVATAR_TYPE", HttpStatus.BAD_REQUEST,
             "Định dạng ảnh không được hỗ trợ. Chỉ chấp nhận JPEG, PNG hoặc WEBP."),
+    UNSUPPORTED_KYC_IMAGE_TYPE("USR-400-UNSUPPORTED_KYC_IMAGE_TYPE", HttpStatus.BAD_REQUEST,
+            "Định dạng ảnh không được hỗ trợ. Chỉ chấp nhận JPEG, PNG hoặc WEBP."),
+    KYC_NOT_FOUND("USR-404-KYC_NOT_FOUND", HttpStatus.NOT_FOUND,
+            "Chưa nộp hồ sơ xác minh danh tính nào."),
+    KYC_ALREADY_VERIFYING("USR-409-KYC_ALREADY_VERIFYING", HttpStatus.CONFLICT,
+            "Hồ sơ xác minh danh tính đang chờ xét duyệt."),
+    KYC_ALREADY_VERIFIED("USR-409-KYC_ALREADY_VERIFIED", HttpStatus.CONFLICT,
+            "Tài khoản đã được xác minh danh tính."),
+    KYC_NOT_PENDING_REVIEW("USR-409-KYC_NOT_PENDING_REVIEW", HttpStatus.CONFLICT,
+            "Hồ sơ này không ở trạng thái chờ duyệt."),
 
     // --- TSK ---
     MISSING_LOCATION("TSK-400-MISSING_LOCATION", HttpStatus.BAD_REQUEST,

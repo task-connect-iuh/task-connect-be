@@ -94,7 +94,7 @@ public class UserProfile {
     }
 
     /**
-     * Dong bo trang thai KYC sau khi module KYC (Buoc 5) duyet hoac tu choi ho so.
+     * Dong bo trang thai KYC sau khi module KYC (Buoc 4) duyet hoac tu choi ho so.
      */
     public void changeKycStatus(KycStatus kycStatus, Instant now) {
         this.kycStatus = kycStatus;
@@ -141,7 +141,7 @@ public class UserProfile {
         return locationLng;
     }
 
-    /** Trang thai KYC hien tai, dong bo tu module KYC (Buoc 5) khi duoc duyet/tu choi. */
+    /** Trang thai KYC hien tai, dong bo tu module KYC (Buoc 4) khi duoc duyet/tu choi. */
     public KycStatus getKycStatus() {
         return kycStatus;
     }
