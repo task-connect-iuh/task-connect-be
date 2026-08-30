@@ -12,10 +12,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import vn.taskconnect.auth.dto.request.ForgotPasswordRequest;
 import vn.taskconnect.auth.dto.request.LoginRequest;
 import vn.taskconnect.auth.dto.request.RegisterRequest;
 import vn.taskconnect.auth.dto.request.ResendVerificationRequest;
+import vn.taskconnect.auth.dto.request.ResetPasswordRequest;
 import vn.taskconnect.auth.dto.request.VerifyEmailRequest;
+import vn.taskconnect.auth.dto.response.ForgotPasswordResponse;
 import vn.taskconnect.auth.dto.response.ResendVerificationResponse;
 import vn.taskconnect.auth.dto.response.TokenResponse;
 import vn.taskconnect.auth.service.AuthService;
@@ -44,11 +47,9 @@ public class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<TokenResponse> register(@Valid @RequestBody RegisterRequest request,
-            HttpServletResponse response) {
-        TokenResponse tokens = authService.register(request);
-        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie(tokens.refreshToken()).toString());
-        return ApiResponse.ok(tokens);
+    public ApiResponse<Void> register(@Valid @RequestBody RegisterRequest request) {
+        authService.register(request);
+        return ApiResponse.ok(null, "Đăng ký thành công. Vui lòng kiểm tra email để lấy mã xác minh.");
     }
 
     @PostMapping("/login")
@@ -112,5 +113,19 @@ public class AuthController {
         ResendVerificationResponse response = authService.resendVerification(request);
         return ApiResponse.ok(response,
                 "Nếu email của bạn đang chờ xác minh, mã xác minh mới đã được gửi. Mã có hiệu lực trong 5 phút.");
+    }
+
+    @PostMapping("/forgot-password")
+    public ApiResponse<ForgotPasswordResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        ForgotPasswordResponse response = authService.forgotPassword(request);
+        return ApiResponse.ok(response,
+                "Nếu email của bạn tồn tại trong hệ thống, mã đặt lại mật khẩu đã được gửi. "
+                        + "Mã có hiệu lực trong 5 phút.");
+    }
+
+    @PostMapping("/reset-password")
+    public ApiResponse<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ApiResponse.ok(null, "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.");
     }
 }

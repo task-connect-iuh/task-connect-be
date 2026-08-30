@@ -38,4 +38,16 @@ class NotificationFacadeImpl implements NotificationFacade {
                     message.accountId(), ex.getMessage(), ex);
         }
     }
+
+    @Override
+    public void sendPasswordResetOtp(EmailOtpMessage message) {
+        try {
+            emailSender.send(message.recipientEmail(),
+                    template.passwordResetSubject(),
+                    template.passwordResetBody(message.otp(), message.validFor()));
+        } catch (EmailDeliveryException | MailException ex) {
+            log.error("Gui ma dat lai mat khau that bai cho account {}: {}",
+                    message.accountId(), ex.getMessage(), ex);
+        }
+    }
 }

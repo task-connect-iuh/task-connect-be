@@ -34,4 +34,18 @@ class NotificationFacadeImplTest {
         assertThatCode(() -> facade.sendEmailVerificationOtp(message)).doesNotThrowAnyException();
         verify(emailSender).send(any(), any(), any());
     }
+
+    @Test
+    void should_swallowAndLog_when_passwordResetEmailSenderThrows() {
+        EmailSender emailSender = mock(EmailSender.class);
+        doThrow(new EmailDeliveryException(new RuntimeException("SMTP timeout")))
+                .when(emailSender).send(any(), any(), any());
+        NotificationFacadeImpl facade = new NotificationFacadeImpl(emailSender, new EmailOtpTemplate());
+
+        EmailOtpMessage message = new EmailOtpMessage(
+                UUID.randomUUID(), "user@example.com", "123456", Duration.ofMinutes(5));
+
+        assertThatCode(() -> facade.sendPasswordResetOtp(message)).doesNotThrowAnyException();
+        verify(emailSender).send(any(), any(), any());
+    }
 }
