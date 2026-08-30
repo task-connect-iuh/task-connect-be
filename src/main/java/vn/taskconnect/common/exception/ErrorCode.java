@@ -94,6 +94,8 @@ public enum ErrorCode {
             "Không tìm thấy hồ sơ chứng chỉ."),
     CERTIFICATION_NOT_PENDING_REVIEW("USR-409-CERTIFICATION_NOT_PENDING_REVIEW", HttpStatus.CONFLICT,
             "Hồ sơ chứng chỉ này không ở trạng thái chờ duyệt."),
+    AVAILABILITY_SLOT_NOT_FOUND("USR-404-AVAILABILITY_SLOT_NOT_FOUND", HttpStatus.NOT_FOUND,
+            "Không tìm thấy khung giờ rảnh này."),
 
     // --- TSK ---
     MISSING_LOCATION("TSK-400-MISSING_LOCATION", HttpStatus.BAD_REQUEST,

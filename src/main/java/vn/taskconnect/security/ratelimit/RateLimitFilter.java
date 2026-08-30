@@ -27,9 +27,9 @@ import vn.taskconnect.common.response.ApiResponse;
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final Map<String, Rule> RULES = Map.of(
-            "/api/v1/auth/register", new Rule(5, Duration.ofHours(1)),
-            "/api/v1/auth/verify-email", new Rule(10, Duration.ofHours(1)),
-            "/api/v1/auth/resend-verification", new Rule(5, Duration.ofHours(1))
+            "/api/v1/auth/register", new Rule(50, Duration.ofHours(1)),
+            "/api/v1/auth/verify-email", new Rule(100, Duration.ofHours(1)),
+            "/api/v1/auth/resend-verification", new Rule(50, Duration.ofHours(1))
     );
 
     private final RateLimiter rateLimiter;
