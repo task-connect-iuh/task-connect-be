@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "TaskConnect - Auth Module",
-    "description": "Test luong dang ky / dang nhap / xac minh email / refresh / logout cua module Auth. Xem task-connect-be/postman/README.md (huong dan trong chat) de biet thu tu chay. Refresh token nam trong cookie httpOnly (Set-Cookie tu login/register), Postman tu luu va gui lai cookie theo domain - khong can bien collection nao cho no.",
+    "description": "Test luong dang ky / dang nhap / xac minh email / refresh / logout / quen mat khau cua module Auth. Xem task-connect-be/postman/README.md (huong dan trong chat) de biet thu tu chay. Refresh token nam trong cookie httpOnly (Set-Cookie tu login/register), Postman tu luu va gui lai cookie theo domain - khong can bien collection nao cho no.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -9,7 +9,9 @@
     { "key": "email", "value": "postman-test@example.com" },
     { "key": "password", "value": "Password123!" },
     { "key": "access_token", "value": "" },
-    { "key": "verify_token", "value": "PASTE_TOKEN_TU_APP.LOG_VAO_DAY" }
+    { "key": "verify_token", "value": "PASTE_TOKEN_TU_APP.LOG_VAO_DAY" },
+    { "key": "reset_otp", "value": "PASTE_MA_DAT_LAI_MAT_KHAU_TU_APP.LOG_VAO_DAY" },
+    { "key": "new_password", "value": "MatKhauMoi@123" }
   ],
   "item": [
     {
@@ -174,6 +176,49 @@
           "raw": "{{base_url}}/api/v1/auth/logout",
           "host": ["{{base_url}}"],
           "path": ["api", "v1", "auth", "logout"]
+        }
+      }
+    },
+    {
+      "name": "7. Forgot Password",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/forgot-password",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "auth", "forgot-password"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "console.log('Vao app.log tim ma dat lai mat khau moi nhat, dan vao bien reset_otp');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Reset Password",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"otp\": \"{{reset_otp}}\",\n  \"newPassword\": \"{{new_password}}\",\n  \"confirmNewPassword\": \"{{new_password}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/reset-password",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "auth", "reset-password"]
         }
       }
     }

@@ -108,6 +108,22 @@ public class AuthAccount {
         }
     }
 
+    /**
+     * Dat mat khau moi sau khi xac minh OTP quen mat khau thanh cong. Xoa luon khoa tam
+     * thoi (failedLoginCount, lockedUntil, chuyen LOCKED ve ACTIVE) - nguoi dung da chung
+     * minh quyen so huu tai khoan qua OTP gui toi email, bang chung manh hon ca mat khau
+     * cu, giu khoa 15 phut sau do la vo ly.
+     */
+    public void resetPassword(String newPasswordHash, Instant now) {
+        this.passwordHash = newPasswordHash;
+        this.failedLoginCount = 0;
+        this.lockedUntil = null;
+        if (status == AccountStatus.LOCKED) {
+            status = AccountStatus.ACTIVE;
+        }
+        this.updatedAt = now;
+    }
+
     public UUID getId() {
         return id;
     }
