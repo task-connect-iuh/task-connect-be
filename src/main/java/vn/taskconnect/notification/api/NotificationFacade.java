@@ -19,4 +19,10 @@ public interface NotificationFacade {
      * duoc nuot va ghi log ben trong, nguoi dung khac phuc bang chuc nang gui lai ma.
      */
     void sendEmailVerificationOtp(EmailOtpMessage message);
+
+    /**
+     * Gui ma OTP dat lai mat khau. Cung dieu kien goi va cung cam ket khong nem exception
+     * nhu {@link #sendEmailVerificationOtp(EmailOtpMessage)} - xem Javadoc do de biet ly do.
+     */
+    void sendPasswordResetOtp(EmailOtpMessage message);
 }

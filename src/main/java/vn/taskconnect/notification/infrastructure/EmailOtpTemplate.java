@@ -24,4 +24,16 @@ public class EmailOtpTemplate {
                 + "hãy bỏ qua email này.\n\n"
                 + "TaskConnect";
     }
+
+    public String passwordResetSubject() {
+        return "Mã đặt lại mật khẩu TaskConnect của bạn";
+    }
+
+    public String passwordResetBody(String otp, Duration validFor) {
+        long minutes = validFor.toMinutes();
+        return "Mã đặt lại mật khẩu của bạn là: " + otp + "\n\n"
+                + "Mã có hiệu lực trong " + minutes + " phút. Không chia sẻ mã này với bất kỳ ai. "
+                + "Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.\n\n"
+                + "TaskConnect";
+    }
 }

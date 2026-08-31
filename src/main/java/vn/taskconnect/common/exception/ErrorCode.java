@@ -46,6 +46,8 @@ public enum ErrorCode {
             "Tài khoản đang bị khoá tạm thời."),
     ACCOUNT_SUSPENDED("AUTH-403-ACCOUNT_SUSPENDED", HttpStatus.FORBIDDEN,
             "Tài khoản đã bị đình chỉ."),
+    EMAIL_NOT_VERIFIED("AUTH-403-EMAIL_NOT_VERIFIED", HttpStatus.FORBIDDEN,
+            "Tài khoản chưa xác thực email. Vui lòng xác minh email trước khi đăng nhập."),
     INVALID_CREDENTIALS("AUTH-401-INVALID_CREDENTIALS", HttpStatus.UNAUTHORIZED,
             "Email hoặc mật khẩu không đúng."),
     INVALID_REFRESH_TOKEN("AUTH-401-INVALID_REFRESH_TOKEN", HttpStatus.UNAUTHORIZED,
@@ -55,6 +57,12 @@ public enum ErrorCode {
     EXPIRED_VERIFICATION_OTP("AUTH-410-EXPIRED_VERIFICATION_OTP", HttpStatus.GONE,
             "Mã xác minh đã hết hạn. Bạn có thể yêu cầu mã mới."),
     TOO_MANY_OTP_ATTEMPTS("AUTH-429-TOO_MANY_OTP_ATTEMPTS", HttpStatus.TOO_MANY_REQUESTS,
+            "Bạn đã nhập sai mã quá nhiều lần. Mã hiện tại không còn hiệu lực, hãy yêu cầu mã mới."),
+    INVALID_RESET_OTP("AUTH-400-INVALID_RESET_OTP", HttpStatus.BAD_REQUEST,
+            "Mã đặt lại mật khẩu không đúng. Bạn có thể nhập lại hoặc yêu cầu mã mới."),
+    EXPIRED_RESET_OTP("AUTH-410-EXPIRED_RESET_OTP", HttpStatus.GONE,
+            "Mã đặt lại mật khẩu đã hết hạn. Bạn có thể yêu cầu mã mới."),
+    TOO_MANY_RESET_OTP_ATTEMPTS("AUTH-429-TOO_MANY_RESET_OTP_ATTEMPTS", HttpStatus.TOO_MANY_REQUESTS,
             "Bạn đã nhập sai mã quá nhiều lần. Mã hiện tại không còn hiệu lực, hãy yêu cầu mã mới."),
 
     // --- USR ---

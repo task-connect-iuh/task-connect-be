@@ -87,7 +87,7 @@ app:
     # Sinh secret moi: openssl rand -base64 48
     secret: ${JWT_SECRET}
     access-token-ttl-minutes: ${JWT_ACCESS_TOKEN_TTL_MINUTES:15}
-    refresh-token-ttl-days: ${JWT_REFRESH_TOKEN_TTL_DAYS:30}
+    refresh-token-ttl-days: ${JWT_REFRESH_TOKEN_TTL_DAYS:15}
     # Secure=true bat buoc khi len production (cookie chi gui qua HTTPS). Mac dinh false
     # de dev chay duoc tren http://localhost khong co HTTPS.
     refresh-cookie-secure: ${JWT_REFRESH_COOKIE_SECURE:false}

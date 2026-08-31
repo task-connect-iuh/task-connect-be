@@ -12,6 +12,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import vn.taskconnect.auth.repository.AuthAccountRepository;
 import vn.taskconnect.auth.repository.AuthAccountRoleRepository;
 import vn.taskconnect.auth.repository.AuthEmailVerificationTokenRepository;
+import vn.taskconnect.auth.repository.AuthPasswordResetTokenRepository;
 import vn.taskconnect.auth.repository.AuthRefreshTokenRepository;
 import vn.taskconnect.security.jwt.JwtProperties;
 import vn.taskconnect.security.jwt.JwtTokenProvider;
@@ -29,9 +30,10 @@ class AuthServiceOtpGenerationTest {
                 mock(AuthAccountRoleRepository.class),
                 mock(AuthRefreshTokenRepository.class),
                 mock(AuthEmailVerificationTokenRepository.class),
+                mock(AuthPasswordResetTokenRepository.class),
                 mock(PasswordEncoder.class),
                 mock(JwtTokenProvider.class),
-                new JwtProperties("test-secret", 15, 30, false),
+                new JwtProperties("test-secret", 15, 15, false),
                 mock(ApplicationEventPublisher.class),
                 Clock.systemUTC());
     }
