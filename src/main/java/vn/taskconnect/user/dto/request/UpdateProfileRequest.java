@@ -17,6 +17,7 @@ public record UpdateProfileRequest(
         @Size(max = 150) String fullName,
         @Size(max = 500) String avatarUrl,
         @Size(max = 500) String addressText,
+        @Size(max = 1000) String bio,
         @Size(max = 255) String operatingArea,
         @DecimalMin("-90.0") @DecimalMax("90.0") BigDecimal locationLat,
         @DecimalMin("-180.0") @DecimalMax("180.0") BigDecimal locationLng

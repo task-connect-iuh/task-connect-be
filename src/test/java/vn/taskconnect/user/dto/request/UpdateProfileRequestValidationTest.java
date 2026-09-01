@@ -34,7 +34,7 @@ class UpdateProfileRequestValidationTest {
     }
 
     private static UpdateProfileRequest requestWithLocation(BigDecimal lat, BigDecimal lng) {
-        return new UpdateProfileRequest("Nguyen Van A", null, null, "Quan 7", lat, lng);
+        return new UpdateProfileRequest("Nguyen Van A", null, null, null, "Quan 7", lat, lng);
     }
 
     // UC03-12: toa do dung bien hop le, khong duoc bao loi.
@@ -72,7 +72,7 @@ class UpdateProfileRequestValidationTest {
     @Test
     void should_haveNoViolations_when_fieldsAreAtMaxAllowedLength() {
         UpdateProfileRequest request = new UpdateProfileRequest(
-                "N".repeat(150), "a".repeat(500), "d".repeat(500), "o".repeat(255), null, null);
+                "N".repeat(150), "a".repeat(500), "d".repeat(500), "b".repeat(1000), "o".repeat(255), null, null);
 
         assertThat(validator.validate(request)).isEmpty();
     }
@@ -81,7 +81,7 @@ class UpdateProfileRequestValidationTest {
     @Test
     void should_haveViolation_when_fullNameExceedsMaxLengthByOne() {
         UpdateProfileRequest request = new UpdateProfileRequest(
-                "N".repeat(151), null, null, "Quan 7", null, null);
+                "N".repeat(151), null, null, null, "Quan 7", null, null);
 
         Set<ConstraintViolation<UpdateProfileRequest>> violations = validator.validate(request);
 
@@ -92,7 +92,7 @@ class UpdateProfileRequestValidationTest {
     @Test
     void should_haveViolation_when_operatingAreaExceedsMaxLengthByOne() {
         UpdateProfileRequest request = new UpdateProfileRequest(
-                "Nguyen Van A", null, null, "o".repeat(256), null, null);
+                "Nguyen Van A", null, null, null, "o".repeat(256), null, null);
 
         Set<ConstraintViolation<UpdateProfileRequest>> violations = validator.validate(request);
 

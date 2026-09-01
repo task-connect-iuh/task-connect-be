@@ -14,9 +14,13 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import vn.taskconnect.common.crypto.AesEncryptionService;
 import vn.taskconnect.common.crypto.CryptoProperties;
 import vn.taskconnect.common.exception.BusinessException;
@@ -26,6 +30,7 @@ import vn.taskconnect.user.api.KycStatus;
 import vn.taskconnect.user.dto.request.RejectKycRequest;
 import vn.taskconnect.user.dto.request.SubmitKycRequest;
 import vn.taskconnect.user.dto.response.KycReviewDetailResponse;
+import vn.taskconnect.user.dto.response.KycReviewSummaryResponse;
 import vn.taskconnect.user.entity.KycVerification;
 import vn.taskconnect.user.entity.UserProfile;
 import vn.taskconnect.user.repository.KycVerificationRepository;
@@ -213,5 +218,23 @@ class KycVerificationServiceTest {
         assertThat(response.idNumber()).isEqualTo("079203001234");
         assertThat(response.idCardFrontViewUrl()).isEqualTo("https://s3.example/front-signed");
         assertThat(response.idCardBackViewUrl()).isEqualTo("https://s3.example/back-signed");
+    }
+
+    @Test
+    void should_returnSummaryPage_when_listingForReview() {
+        KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+                encryptionService.encrypt("079203001234"), encryptionService.encrypt("front-key"),
+                encryptionService.encrypt("back-key"), FIXED_NOW);
+        PageRequest pageable = PageRequest.of(0, 20);
+        when(kycRepository.findByStatus(KycStatus.VERIFYING, pageable))
+                .thenReturn(new PageImpl<>(List.of(pending), pageable, 1));
+
+        Page<KycReviewSummaryResponse> result = service.listForReview(KycStatus.VERIFYING, pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).id()).isEqualTo(pending.getId());
+        assertThat(result.getContent().get(0).fullNameOnId()).isEqualTo("Nguyen Van A");
+        // Khong duoc lo so CCCD tho/da giai ma trong DTO tom tat - chi KycReviewDetailResponse moi co truong nay.
     }
 }

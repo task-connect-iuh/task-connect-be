@@ -40,6 +40,9 @@ public class UserProfile {
     @Column(name = "address_text", length = 500)
     private String addressText;
 
+    @Column(name = "bio", length = 1000)
+    private String bio;
+
     @Column(name = "operating_area", nullable = false)
     private String operatingArea;
 
@@ -82,11 +85,12 @@ public class UserProfile {
      * Cap nhat cac truong ho so co the sua duoc tu API PATCH /users/me. locationLat/Lng
      * co the null neu nguoi dung khong khai bao toa do.
      */
-    public void updateDetails(String fullName, String avatarUrl, String addressText, String operatingArea,
-            BigDecimal locationLat, BigDecimal locationLng, Instant now) {
+    public void updateDetails(String fullName, String avatarUrl, String addressText, String bio,
+            String operatingArea, BigDecimal locationLat, BigDecimal locationLng, Instant now) {
         this.fullName = fullName;
         this.avatarUrl = avatarUrl;
         this.addressText = addressText;
+        this.bio = bio;
         this.operatingArea = operatingArea;
         this.locationLat = locationLat;
         this.locationLng = locationLng;
@@ -124,6 +128,11 @@ public class UserProfile {
     /** Dia chi day du dang van ban tu do, null neu chua khai bao. */
     public String getAddressText() {
         return addressText;
+    }
+
+    /** Gioi thieu ban than dang van ban tu do, cong khai cho nguoi khac xem - null neu chua khai bao. */
+    public String getBio() {
+        return bio;
     }
 
     /** Khu vuc hoat dong, bat buoc phai co gia tri (NOT NULL trong schema). */

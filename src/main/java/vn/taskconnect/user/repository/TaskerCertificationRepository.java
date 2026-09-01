@@ -3,7 +3,10 @@ package vn.taskconnect.user.repository;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import vn.taskconnect.user.api.CertificationStatus;
 import vn.taskconnect.user.entity.TaskerCertification;
 
 /**
@@ -22,4 +25,10 @@ public interface TaskerCertificationRepository extends JpaRepository<TaskerCerti
     /** Lan nop gan nhat cua mot cap Tasker+category - la lan dang/ vua duoc xet duyet. */
     Optional<TaskerCertification> findFirstByAccountIdAndCategoryIdOrderBySubmittedAtDesc(UUID accountId,
             UUID categoryId);
+
+    /**
+     * Hang doi duyet cho Admin, xuyen suot moi tai khoan/category - moi lan nop la 1 dong
+     * rieng nen loc thang theo status la du, giong KycVerificationRepository.findByStatus.
+     */
+    Page<TaskerCertification> findByStatus(CertificationStatus status, Pageable pageable);
 }

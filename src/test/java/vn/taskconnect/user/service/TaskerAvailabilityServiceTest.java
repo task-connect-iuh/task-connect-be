@@ -129,4 +129,45 @@ class TaskerAvailabilityServiceTest {
                 .isEqualTo(ErrorCode.AVAILABILITY_SLOT_NOT_FOUND);
         verify(repository, never()).delete(any());
     }
+
+    @Test
+    void should_throwAvailabilitySlotOverlap_when_newSlotOverlapsExistingOnSameDay() {
+        TaskerAvailability existing = new TaskerAvailability(UUID.randomUUID(), ACCOUNT_ID, 1, LocalTime.of(8, 0),
+                LocalTime.of(12, 0));
+        when(repository.findByAccountIdAndDayOfWeek(ACCOUNT_ID, 1)).thenReturn(List.of(existing));
+
+        assertThatThrownBy(() -> service.addSlot(ACCOUNT_ID,
+                new CreateAvailabilityRequest(1, LocalTime.of(11, 0), LocalTime.of(13, 0))))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).errorCode())
+                .isEqualTo(ErrorCode.AVAILABILITY_SLOT_OVERLAP);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void should_allowAddingSlot_when_backToBackWithExistingSlotOnSameDay() {
+        TaskerAvailability existing = new TaskerAvailability(UUID.randomUUID(), ACCOUNT_ID, 1, LocalTime.of(8, 0),
+                LocalTime.of(12, 0));
+        when(repository.findByAccountIdAndDayOfWeek(ACCOUNT_ID, 1)).thenReturn(List.of(existing));
+        when(repository.save(any(TaskerAvailability.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskerAvailability result = service.addSlot(ACCOUNT_ID,
+                new CreateAvailabilityRequest(1, LocalTime.of(12, 0), LocalTime.of(17, 0)));
+
+        assertThat(result.getStartTime()).isEqualTo(LocalTime.of(12, 0));
+    }
+
+    @Test
+    void should_allowUpdatingSlot_when_onlyOverlappingWithItself() {
+        TaskerAvailability existing = new TaskerAvailability(UUID.randomUUID(), ACCOUNT_ID, 1, LocalTime.of(8, 0),
+                LocalTime.of(12, 0));
+        when(repository.findById(existing.getId())).thenReturn(Optional.of(existing));
+        when(repository.findByAccountIdAndDayOfWeek(ACCOUNT_ID, 1)).thenReturn(List.of(existing));
+        when(repository.save(any(TaskerAvailability.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskerAvailability result = service.updateSlot(ACCOUNT_ID, existing.getId(),
+                new UpdateAvailabilityRequest(null, LocalTime.of(9, 0), null));
+
+        assertThat(result.getStartTime()).isEqualTo(LocalTime.of(9, 0));
+    }
 }

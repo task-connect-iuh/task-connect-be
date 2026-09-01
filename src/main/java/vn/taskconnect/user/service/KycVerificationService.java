@@ -4,6 +4,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.taskconnect.common.crypto.AesEncryptionService;
@@ -14,15 +16,16 @@ import vn.taskconnect.user.api.KycStatus;
 import vn.taskconnect.user.dto.request.RejectKycRequest;
 import vn.taskconnect.user.dto.request.SubmitKycRequest;
 import vn.taskconnect.user.dto.response.KycReviewDetailResponse;
+import vn.taskconnect.user.dto.response.KycReviewSummaryResponse;
 import vn.taskconnect.user.entity.KycVerification;
 import vn.taskconnect.user.entity.UserProfile;
 import vn.taskconnect.user.repository.KycVerificationRepository;
 import vn.taskconnect.user.repository.UserProfileRepository;
 
 /**
- * Nghiep vu xac minh danh tinh (KYC) - Buoc 4: nop ho so (Task Poster va Tasker), xem trang
- * thai cua chinh minh, va Admin duyet/tu choi tung lan nop. Ap dung chung cho ca hai vai
- * tro, khong rieng Tasker - Poster chi can KYC xong la du, khong di tiep Buoc 6.
+ * Nghiep vu xac minh danh tinh (KYC) - Buoc 4: nop ho so, xem trang thai cua chinh minh, va
+ * Admin duyet/tu choi/liet ke hang doi tung lan nop. Chi Tasker can KYC (UC05 "Xac minh
+ * danh tinh Tasker") - Task Poster khong can, gate o KycVerificationController.
  */
 @Service
 public class KycVerificationService {
@@ -108,6 +111,16 @@ public class KycVerificationService {
                 verification.getSubmittedAt(),
                 verification.getReviewedAt(),
                 verification.getRejectionReason());
+    }
+
+    /**
+     * Chi danh cho Admin: hang doi cac lan nop KYC theo status (mac dinh VERIFYING o
+     * controller), moi nhat truoc. Tra ve DTO nhe (khong giai ma so CCCD, khong ky presigned
+     * URL) - xem chi tiet that su goi getLatestKycForReview() rieng cho dung accountId.
+     */
+    @Transactional(readOnly = true)
+    public Page<KycReviewSummaryResponse> listForReview(KycStatus status, Pageable pageable) {
+        return kycRepository.findByStatus(status, pageable).map(KycReviewSummaryResponse::from);
     }
 
     /** Admin duyet mot lan nop - chi cho phep khi dang VERIFYING, dong bo sang user_profiles neu co ho so. */

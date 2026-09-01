@@ -50,6 +50,8 @@ public enum ErrorCode {
             "Tài khoản chưa xác thực email. Vui lòng xác minh email trước khi đăng nhập."),
     INVALID_CREDENTIALS("AUTH-401-INVALID_CREDENTIALS", HttpStatus.UNAUTHORIZED,
             "Email hoặc mật khẩu không đúng."),
+    INVALID_CURRENT_PASSWORD("AUTH-401-INVALID_CURRENT_PASSWORD", HttpStatus.UNAUTHORIZED,
+            "Mật khẩu hiện tại không đúng."),
     INVALID_REFRESH_TOKEN("AUTH-401-INVALID_REFRESH_TOKEN", HttpStatus.UNAUTHORIZED,
             "Phiên đăng nhập không hợp lệ, vui lòng đăng nhập lại."),
     INVALID_VERIFICATION_OTP("AUTH-400-INVALID_VERIFICATION_OTP", HttpStatus.BAD_REQUEST,
@@ -64,6 +66,16 @@ public enum ErrorCode {
             "Mã đặt lại mật khẩu đã hết hạn. Bạn có thể yêu cầu mã mới."),
     TOO_MANY_RESET_OTP_ATTEMPTS("AUTH-429-TOO_MANY_RESET_OTP_ATTEMPTS", HttpStatus.TOO_MANY_REQUESTS,
             "Bạn đã nhập sai mã quá nhiều lần. Mã hiện tại không còn hiệu lực, hãy yêu cầu mã mới."),
+    NOT_SUPER_ADMIN("AUTH-403-NOT_SUPER_ADMIN", HttpStatus.FORBIDDEN,
+            "Chỉ super-admin mới được gán hoặc thu hồi quyền quản trị."),
+    ACCOUNT_NOT_FOUND("AUTH-404-ACCOUNT_NOT_FOUND", HttpStatus.NOT_FOUND,
+            "Không tìm thấy tài khoản với email này."),
+    ROLE_ALREADY_GRANTED("AUTH-409-ROLE_ALREADY_GRANTED", HttpStatus.CONFLICT,
+            "Tài khoản này đã có quyền quản trị."),
+    ROLE_NOT_ASSIGNED("AUTH-404-ROLE_NOT_ASSIGNED", HttpStatus.NOT_FOUND,
+            "Tài khoản này chưa có quyền quản trị."),
+    CANNOT_REVOKE_SUPER_ADMIN("AUTH-409-CANNOT_REVOKE_SUPER_ADMIN", HttpStatus.CONFLICT,
+            "Không thể thu hồi quyền quản trị của super-admin."),
 
     // --- USR ---
     MISSING_OPERATING_AREA("USR-400-MISSING_OPERATING_AREA", HttpStatus.BAD_REQUEST,
@@ -104,6 +116,8 @@ public enum ErrorCode {
             "Hồ sơ chứng chỉ này không ở trạng thái chờ duyệt."),
     AVAILABILITY_SLOT_NOT_FOUND("USR-404-AVAILABILITY_SLOT_NOT_FOUND", HttpStatus.NOT_FOUND,
             "Không tìm thấy khung giờ rảnh này."),
+    AVAILABILITY_SLOT_OVERLAP("USR-409-AVAILABILITY_SLOT_OVERLAP", HttpStatus.CONFLICT,
+            "Khung giờ này trùng với một khung giờ rảnh khác đã khai báo trong cùng ngày."),
 
     // --- TSK ---
     MISSING_LOCATION("TSK-400-MISSING_LOCATION", HttpStatus.BAD_REQUEST,

@@ -3,30 +3,51 @@ package vn.taskconnect.user.service;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
+import vn.taskconnect.user.api.SkillVerificationStatus;
 import vn.taskconnect.user.dto.request.UpdateProfileRequest;
+import vn.taskconnect.user.dto.response.AvailabilitySlotResponse;
+import vn.taskconnect.user.dto.response.PublicProfileResponse;
+import vn.taskconnect.user.dto.response.PublicVerifiedSkillResponse;
+import vn.taskconnect.user.entity.ServiceCategory;
+import vn.taskconnect.user.entity.TaskerSkillProfile;
 import vn.taskconnect.user.entity.UserProfile;
+import vn.taskconnect.user.repository.ServiceCategoryRepository;
+import vn.taskconnect.user.repository.TaskerAvailabilityRepository;
+import vn.taskconnect.user.repository.TaskerSkillProfileRepository;
 import vn.taskconnect.user.repository.UserProfileRepository;
 
 /**
  * Nghiep vu ho so ca nhan: xem, tao moi (lan dau) va cap nhat mot phan ho so cua chinh chu
- * tai khoan, va xem ho so toi thieu cong khai cua tai khoan khac.
+ * tai khoan, va xem ho so toi thieu cong khai cua tai khoan khac (kem danh sach ky nang da
+ * VERIFIED va lich ranh - xem getPublicProfile).
  */
 @Service
 public class UserProfileService {
 
     private final UserProfileRepository profileRepository;
+    private final TaskerSkillProfileRepository skillRepository;
+    private final ServiceCategoryRepository categoryRepository;
+    private final TaskerAvailabilityRepository availabilityRepository;
     private final Clock clock;
 
-    public UserProfileService(UserProfileRepository profileRepository, Clock clock) {
+    public UserProfileService(UserProfileRepository profileRepository,
+            TaskerSkillProfileRepository skillRepository, ServiceCategoryRepository categoryRepository,
+            TaskerAvailabilityRepository availabilityRepository, Clock clock) {
         this.profileRepository = profileRepository;
+        this.skillRepository = skillRepository;
+        this.categoryRepository = categoryRepository;
+        this.availabilityRepository = availabilityRepository;
         this.clock = clock;
     }
 
@@ -43,12 +64,39 @@ public class UserProfileService {
 
     /**
      * Doc ho so toi thieu cong khai cua mot tai khoan bat ky (dung khi xem trang ho so
-     * nguoi khac). Cung nem USR-404-PROFILE_NOT_FOUND neu chua co ho so.
+     * nguoi khac), kem danh sach nhom dich vu da VERIFIED de FE hien badge "Da xac minh" va
+     * lich ranh trong tuan de Poster biet Tasker ranh luc nao. Cung nem
+     * USR-404-PROFILE_NOT_FOUND neu chua co ho so.
      */
     @Transactional(readOnly = true)
-    public UserProfile getPublicProfile(UUID accountId) {
-        return profileRepository.findByAccountId(accountId)
+    public PublicProfileResponse getPublicProfile(UUID accountId) {
+        UserProfile profile = profileRepository.findByAccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROFILE_NOT_FOUND));
+        List<AvailabilitySlotResponse> availability = availabilityRepository
+                .findByAccountIdOrderByDayOfWeekAscStartTimeAsc(accountId).stream()
+                .map(AvailabilitySlotResponse::from)
+                .toList();
+        return PublicProfileResponse.from(profile, verifiedSkillsOf(accountId), availability);
+    }
+
+    /**
+     * Lap danh sach ky nang da VERIFIED cua mot tai khoan kem ten nhom dich vu - lay ten
+     * theo lo (findAllById) thay vi truy van tung dong de tranh N+1 khi mot Tasker verified
+     * nhieu nhom cung luc.
+     */
+    private List<PublicVerifiedSkillResponse> verifiedSkillsOf(UUID accountId) {
+        List<TaskerSkillProfile> verified = skillRepository
+                .findByAccountIdAndVerificationStatusOrderByVerifiedAtAsc(accountId, SkillVerificationStatus.VERIFIED);
+        if (verified.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, String> categoryNameById = categoryRepository
+                .findAllById(verified.stream().map(TaskerSkillProfile::getCategoryId).toList()).stream()
+                .collect(Collectors.toMap(ServiceCategory::getId, ServiceCategory::getName));
+        return verified.stream()
+                .map(skill -> new PublicVerifiedSkillResponse(skill.getCategoryId(),
+                        categoryNameById.get(skill.getCategoryId()), skill.getVerifiedAt()))
+                .toList();
     }
 
     /**
@@ -75,7 +123,7 @@ public class UserProfileService {
         String fullName = requireOnFirstCreate(request.fullName(), ErrorCode.MISSING_FULL_NAME);
         String operatingArea = requireOnFirstCreate(request.operatingArea(), ErrorCode.MISSING_OPERATING_AREA);
         UserProfile profile = new UserProfile(UUID.randomUUID(), accountId, fullName, operatingArea, now);
-        profile.updateDetails(fullName, request.avatarUrl(), request.addressText(), operatingArea,
+        profile.updateDetails(fullName, request.avatarUrl(), request.addressText(), request.bio(), operatingArea,
                 request.locationLat(), request.locationLng(), now);
         try {
             return profileRepository.saveAndFlush(profile);
@@ -96,19 +144,21 @@ public class UserProfileService {
         String fullName = request.fullName() != null ? request.fullName() : profile.getFullName();
         String avatarUrl = request.avatarUrl() != null ? request.avatarUrl() : profile.getAvatarUrl();
         String addressText = request.addressText() != null ? request.addressText() : profile.getAddressText();
+        String bio = request.bio() != null ? request.bio() : profile.getBio();
         String operatingArea = request.operatingArea() != null ? request.operatingArea() : profile.getOperatingArea();
         BigDecimal locationLat = request.locationLat() != null ? request.locationLat() : profile.getLocationLat();
         BigDecimal locationLng = request.locationLng() != null ? request.locationLng() : profile.getLocationLng();
 
         if (Objects.equals(fullName, profile.getFullName()) && Objects.equals(avatarUrl, profile.getAvatarUrl())
                 && Objects.equals(addressText, profile.getAddressText())
+                && Objects.equals(bio, profile.getBio())
                 && Objects.equals(operatingArea, profile.getOperatingArea())
                 && isSameNumericValue(locationLat, profile.getLocationLat())
                 && isSameNumericValue(locationLng, profile.getLocationLng())) {
             return profile;
         }
 
-        profile.updateDetails(fullName, avatarUrl, addressText, operatingArea, locationLat, locationLng, now);
+        profile.updateDetails(fullName, avatarUrl, addressText, bio, operatingArea, locationLat, locationLng, now);
         return profileRepository.save(profile);
     }
 

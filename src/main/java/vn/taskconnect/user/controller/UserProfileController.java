@@ -61,7 +61,7 @@ public class UserProfileController {
     @GetMapping("/{accountId}")
     @PreAuthorize("isAuthenticated()")
     public ApiResponse<PublicProfileResponse> getPublicProfile(@PathVariable UUID accountId) {
-        return ApiResponse.ok(PublicProfileResponse.from(profileService.getPublicProfile(accountId)));
+        return ApiResponse.ok(profileService.getPublicProfile(accountId));
     }
 
     /**

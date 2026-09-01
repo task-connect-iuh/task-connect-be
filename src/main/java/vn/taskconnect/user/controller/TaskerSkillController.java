@@ -3,6 +3,7 @@ package vn.taskconnect.user.controller;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,14 +12,18 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import vn.taskconnect.common.response.ApiResponse;
+import vn.taskconnect.common.response.PageResponse;
 import vn.taskconnect.security.jwt.AuthenticatedPrincipal;
+import vn.taskconnect.user.api.CertificationStatus;
 import vn.taskconnect.user.dto.request.CertificateUploadUrlRequest;
 import vn.taskconnect.user.dto.request.RejectCertificationRequest;
 import vn.taskconnect.user.dto.request.SubmitSkillRequest;
 import vn.taskconnect.user.dto.response.CertificateUploadUrlResponse;
 import vn.taskconnect.user.dto.response.CertificationReviewResponse;
+import vn.taskconnect.user.dto.response.CertificationReviewSummaryResponse;
 import vn.taskconnect.user.dto.response.TaskerSkillResponse;
 import vn.taskconnect.user.service.CertificateUploadService;
 import vn.taskconnect.user.service.TaskerSkillService;
@@ -67,6 +72,35 @@ public class TaskerSkillController {
     @PreAuthorize("hasRole('TASKER')")
     public ApiResponse<List<TaskerSkillResponse>> getMySkills(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
         return ApiResponse.ok(skillService.getMySkills(principal.accountId()));
+    }
+
+    /**
+     * Chinh chu Tasker tu xem lai toan bo lich su nop chung chi cua minh cho mot category -
+     * phuc vu nut "Xem chi tiet" o man hinh Ho so ky nang, cung dinh dang DTO voi endpoint
+     * Admin ben duoi nhung tu gioi han accountId theo principal dang dang nhap, khong nhan
+     * accountId tu path nhu ban Admin.
+     */
+    @GetMapping("/me/tasker-skills/{categoryId}/certifications")
+    @PreAuthorize("hasRole('TASKER')")
+    public ApiResponse<List<CertificationReviewResponse>> getMyCertifications(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID categoryId) {
+        return ApiResponse.ok(skillService.getCertificationsForReview(principal.accountId(), categoryId));
+    }
+
+    /**
+     * Chi Admin: hang doi cac lan nop chung chi theo status (mac dinh PENDING_REVIEW - dang
+     * cho duyet), xuyen suot moi tai khoan/category, moi nhat truoc, co phan trang. Dung de
+     * biet accountId+categoryId nao dang can xu ly - xem chi tiet tung dong qua
+     * getCertificationsForReview ben duoi.
+     */
+    @GetMapping("/tasker-certifications")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<PageResponse<CertificationReviewSummaryResponse>> listCertificationsForReview(
+            @RequestParam(defaultValue = "PENDING_REVIEW") CertificationStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(PageResponse.from(
+                skillService.listCertificationsForReview(status, PageRequest.of(page, Math.min(size, 100)))));
     }
 
     /**

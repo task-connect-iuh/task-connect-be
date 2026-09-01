@@ -13,4 +13,7 @@ public interface TaskerAvailabilityRepository extends JpaRepository<TaskerAvaila
 
     /** Toan bo khung gio ranh cua mot Tasker, sap theo thu roi gio bat dau - dung cho man hinh "lich ranh cua toi". */
     List<TaskerAvailability> findByAccountIdOrderByDayOfWeekAscStartTimeAsc(UUID accountId);
+
+    /** Cac khung gio da khai bao cua mot Tasker trong dung mot ngay trong tuan - dung de kiem tra trung gio khi them/sua. */
+    List<TaskerAvailability> findByAccountIdAndDayOfWeek(UUID accountId, int dayOfWeek);
 }

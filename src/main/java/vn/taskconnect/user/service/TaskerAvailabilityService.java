@@ -28,10 +28,11 @@ public class TaskerAvailabilityService {
         this.availabilityRepository = availabilityRepository;
     }
 
-    /** Khai bao mot khung gio ranh moi - khong co UNIQUE tren (account_id, day_of_week), cho phep nhieu khung/ngay. */
+    /** Khai bao mot khung gio ranh moi - khong co UNIQUE tren (account_id, day_of_week), cho phep nhieu khung/ngay nhung khong duoc trung gio nhau. */
     @Transactional
     public TaskerAvailability addSlot(UUID accountId, CreateAvailabilityRequest request) {
         requireEndAfterStart(request.startTime(), request.endTime());
+        requireNoOverlap(accountId, request.dayOfWeek(), request.startTime(), request.endTime(), null);
         TaskerAvailability slot = new TaskerAvailability(UUID.randomUUID(), accountId, request.dayOfWeek(),
                 request.startTime(), request.endTime());
         return availabilityRepository.save(slot);
@@ -54,6 +55,7 @@ public class TaskerAvailabilityService {
         LocalTime startTime = request.startTime() != null ? request.startTime() : slot.getStartTime();
         LocalTime endTime = request.endTime() != null ? request.endTime() : slot.getEndTime();
         requireEndAfterStart(startTime, endTime);
+        requireNoOverlap(accountId, dayOfWeek, startTime, endTime, slotId);
         slot.update(dayOfWeek, startTime, endTime);
         return availabilityRepository.save(slot);
     }
@@ -83,6 +85,22 @@ public class TaskerAvailabilityService {
     private void requireEndAfterStart(LocalTime startTime, LocalTime endTime) {
         if (!endTime.isAfter(startTime)) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Giờ kết thúc phải sau giờ bắt đầu.");
+        }
+    }
+
+    /**
+     * Khung gio moi/sua khong duoc chong lan voi bat ky khung gio nao khac da khai bao
+     * trong CUNG mot ngay cua chinh Tasker do - hai khoang [start1,end1) va [start2,end2)
+     * chong lan khi start1 < end2 VA start2 < end1. excludeSlotId dung khi sua (bo qua
+     * chinh dong dang sua so voi chinh no), null khi them moi.
+     */
+    private void requireNoOverlap(UUID accountId, int dayOfWeek, LocalTime startTime, LocalTime endTime,
+            UUID excludeSlotId) {
+        boolean overlaps = availabilityRepository.findByAccountIdAndDayOfWeek(accountId, dayOfWeek).stream()
+                .filter(other -> excludeSlotId == null || !other.getId().equals(excludeSlotId))
+                .anyMatch(other -> startTime.isBefore(other.getEndTime()) && other.getStartTime().isBefore(endTime));
+        if (overlaps) {
+            throw new BusinessException(ErrorCode.AVAILABILITY_SLOT_OVERLAP);
         }
     }
 }

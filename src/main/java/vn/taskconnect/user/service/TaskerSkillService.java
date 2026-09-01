@@ -6,6 +6,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.taskconnect.common.crypto.AesEncryptionService;
@@ -18,6 +20,7 @@ import vn.taskconnect.user.api.SkillVerificationStatus;
 import vn.taskconnect.user.dto.request.RejectCertificationRequest;
 import vn.taskconnect.user.dto.request.SubmitSkillRequest;
 import vn.taskconnect.user.dto.response.CertificationReviewResponse;
+import vn.taskconnect.user.dto.response.CertificationReviewSummaryResponse;
 import vn.taskconnect.user.dto.response.TaskerSkillResponse;
 import vn.taskconnect.user.entity.CategoryCertificateRequirement;
 import vn.taskconnect.user.entity.TaskerCertification;
@@ -113,9 +116,11 @@ public class TaskerSkillService {
     }
 
     /**
-     * Chi danh cho Admin: toan bo lich su nop chung chi cua mot cap Tasker+category, kem
-     * giai ma so hieu chung chi va presigned GET URL ngan han de xem file - phuc vu xet
-     * duyet lan dang PENDING_REVIEW, van tra ve ca cac lan cu de xem lich su.
+     * Toan bo lich su nop chung chi cua mot cap Tasker+category, kem giai ma so hieu chung
+     * chi va presigned GET URL ngan han de xem file. Dung chung cho hai noi goi: Admin xet
+     * duyet (accountId lay tu path, method public rieng ben Controller) va chinh chu Tasker
+     * tu xem lai qua nut "Xem chi tiet" (accountId lay tu principal dang dang nhap) - vi
+     * cung mot format DTO va cung logic giai ma/ky URL, khong tach rieng de tranh trung lap.
      */
     @Transactional(readOnly = true)
     public List<CertificationReviewResponse> getCertificationsForReview(UUID accountId, UUID categoryId) {
@@ -123,6 +128,18 @@ public class TaskerSkillService {
                 .stream()
                 .map(this::toReviewResponse)
                 .toList();
+    }
+
+    /**
+     * Chi danh cho Admin: hang doi cac lan nop chung chi theo status (mac dinh
+     * PENDING_REVIEW), xuyen suot moi tai khoan/category, moi nhat truoc. Tra ve DTO nhe
+     * (khong giai ma so hieu chung chi, khong ky presigned URL) - xem chi tiet that su goi
+     * getCertificationsForReview(accountId, categoryId) rieng.
+     */
+    @Transactional(readOnly = true)
+    public Page<CertificationReviewSummaryResponse> listCertificationsForReview(CertificationStatus status,
+            Pageable pageable) {
+        return certificationRepository.findByStatus(status, pageable).map(CertificationReviewSummaryResponse::from);
     }
 
     /** Admin duyet mot lan nop chung chi - chuyen ca chung chi lan ho so ky nang cua category do sang VERIFIED. */

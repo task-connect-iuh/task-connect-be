@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import vn.taskconnect.user.api.SkillVerificationStatus;
 import vn.taskconnect.user.entity.TaskerSkillProfile;
 
 /**
@@ -17,4 +18,8 @@ public interface TaskerSkillProfileRepository extends JpaRepository<TaskerSkillP
 
     /** Ho so ky nang cua dung mot cap Tasker+category - UNIQUE trong V2 migration. */
     Optional<TaskerSkillProfile> findByAccountIdAndCategoryId(UUID accountId, UUID categoryId);
+
+    /** Cac nhom dich vu da VERIFIED cua mot Tasker, dung de lo badge "Da xac minh" tren ho so cong khai (GET /users/{accountId}). */
+    List<TaskerSkillProfile> findByAccountIdAndVerificationStatusOrderByVerifiedAtAsc(UUID accountId,
+            SkillVerificationStatus verificationStatus);
 }

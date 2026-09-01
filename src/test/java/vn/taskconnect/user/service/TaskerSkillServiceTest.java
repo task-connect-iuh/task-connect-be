@@ -17,6 +17,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import vn.taskconnect.common.crypto.AesEncryptionService;
 import vn.taskconnect.common.crypto.CryptoProperties;
 import vn.taskconnect.common.exception.BusinessException;
@@ -27,6 +30,7 @@ import vn.taskconnect.user.api.SkillVerificationStatus;
 import vn.taskconnect.user.dto.request.RejectCertificationRequest;
 import vn.taskconnect.user.dto.request.SubmitSkillRequest;
 import vn.taskconnect.user.dto.response.CertificationReviewResponse;
+import vn.taskconnect.user.dto.response.CertificationReviewSummaryResponse;
 import vn.taskconnect.user.dto.response.TaskerSkillResponse;
 import vn.taskconnect.user.entity.CategoryCertificateRequirement;
 import vn.taskconnect.user.entity.KycVerification;
@@ -324,5 +328,23 @@ class TaskerSkillServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).categoryId()).isEqualTo(CATEGORY_ID);
         assertThat(result.get(0).latestCertificationStatus()).isNull();
+    }
+
+    @Test
+    void should_returnSummaryPage_when_listingCertificationsForReview() {
+        TaskerCertification pending = new TaskerCertification(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID,
+                CERTIFICATE_TYPE_ID, null, null, null, null, new byte[0], null, null, FIXED_NOW);
+        PageRequest pageable = PageRequest.of(0, 20);
+        when(certificationRepository.findByStatus(CertificationStatus.PENDING_REVIEW, pageable))
+                .thenReturn(new PageImpl<>(List.of(pending), pageable, 1));
+
+        Page<CertificationReviewSummaryResponse> result =
+                service.listCertificationsForReview(CertificationStatus.PENDING_REVIEW, pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).id()).isEqualTo(pending.getId());
+        assertThat(result.getContent().get(0).accountId()).isEqualTo(ACCOUNT_ID);
+        assertThat(result.getContent().get(0).categoryId()).isEqualTo(CATEGORY_ID);
     }
 }

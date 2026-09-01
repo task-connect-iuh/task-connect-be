@@ -22,6 +22,8 @@ import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.user.dto.request.UpdateProfileRequest;
 import vn.taskconnect.user.entity.UserProfile;
 import vn.taskconnect.user.repository.ServiceCategoryRepository;
+import vn.taskconnect.user.repository.TaskerAvailabilityRepository;
+import vn.taskconnect.user.repository.TaskerSkillProfileRepository;
 import vn.taskconnect.user.repository.UserProfileRepository;
 
 /**
@@ -37,12 +39,16 @@ class UserProfileServiceTest {
     private static final Instant FIXED_NOW = Instant.parse("2026-08-26T10:00:00Z");
 
     private final UserProfileRepository repository = mock(UserProfileRepository.class);
+    private final TaskerSkillProfileRepository skillRepository = mock(TaskerSkillProfileRepository.class);
+    private final ServiceCategoryRepository categoryRepository = mock(ServiceCategoryRepository.class);
+    private final TaskerAvailabilityRepository availabilityRepository = mock(TaskerAvailabilityRepository.class);
     private final Clock clock = Clock.fixed(FIXED_NOW, ZoneOffset.UTC);
-    private final UserProfileService service = new UserProfileService(repository, clock);
+    private final UserProfileService service =
+            new UserProfileService(repository, skillRepository, categoryRepository, availabilityRepository, clock);
 
-    private static UpdateProfileRequest requestOf(String fullName, String avatarUrl, String addressText,
+    private static UpdateProfileRequest requestOf(String fullName, String avatarUrl, String addressText, String bio,
             String operatingArea, BigDecimal lat, BigDecimal lng) {
-        return new UpdateProfileRequest(fullName, avatarUrl, addressText, operatingArea, lat, lng);
+        return new UpdateProfileRequest(fullName, avatarUrl, addressText, bio, operatingArea, lat, lng);
     }
 
     // UC03-01: PATCH lan dau, du truong bat buoc -> tao moi ho so.
@@ -51,7 +57,7 @@ class UserProfileServiceTest {
         when(repository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
         when(repository.saveAndFlush(any(UserProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        UpdateProfileRequest request = requestOf("Nguyen Van A", null, null, "Quan 7, TP.HCM", null, null);
+        UpdateProfileRequest request = requestOf("Nguyen Van A", null, null, null, "Quan 7, TP.HCM", null, null);
         UserProfile result = service.upsertProfile(ACCOUNT_ID, request);
 
         assertThat(result.getFullName()).isEqualTo("Nguyen Van A");
@@ -65,7 +71,7 @@ class UserProfileServiceTest {
     void should_throwMissingFullName_when_firstPatchHasNoFullName() {
         when(repository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
 
-        UpdateProfileRequest request = requestOf(null, null, null, "Quan 7, TP.HCM", null, null);
+        UpdateProfileRequest request = requestOf(null, null, null, null, "Quan 7, TP.HCM", null, null);
 
         assertThatThrownBy(() -> service.upsertProfile(ACCOUNT_ID, request))
                 .isInstanceOf(BusinessException.class)
@@ -79,7 +85,7 @@ class UserProfileServiceTest {
     void should_throwMissingOperatingArea_when_firstPatchHasBlankOperatingArea() {
         when(repository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
 
-        UpdateProfileRequest request = requestOf("Nguyen Van A", null, null, "   ", null, null);
+        UpdateProfileRequest request = requestOf("Nguyen Van A", null, null, null, "   ", null, null);
 
         assertThatThrownBy(() -> service.upsertProfile(ACCOUNT_ID, request))
                 .isInstanceOf(BusinessException.class)
@@ -93,12 +99,12 @@ class UserProfileServiceTest {
     void should_keepOtherFields_when_patchOnlySendsAvatarUrl() {
         UserProfile existing = new UserProfile(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", "Quan 7",
                 FIXED_NOW.minusSeconds(3600));
-        existing.updateDetails("Nguyen Van A", "old-avatar.png", "123 Le Loi", "Quan 7",
+        existing.updateDetails("Nguyen Van A", "old-avatar.png", "123 Le Loi", null, "Quan 7",
                 BigDecimal.valueOf(10.75), BigDecimal.valueOf(106.66), FIXED_NOW.minusSeconds(3600));
         when(repository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(existing));
         when(repository.save(any(UserProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        UpdateProfileRequest request = requestOf(null, "new-avatar.png", null, null, null, null);
+        UpdateProfileRequest request = requestOf(null, "new-avatar.png", null, null, null, null, null);
         UserProfile result = service.upsertProfile(ACCOUNT_ID, request);
 
         assertThat(result.getAvatarUrl()).isEqualTo("new-avatar.png");
@@ -115,11 +121,11 @@ class UserProfileServiceTest {
         Instant originalUpdatedAt = FIXED_NOW.minusSeconds(3600);
         UserProfile existing = new UserProfile(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", "Quan 7",
                 originalUpdatedAt);
-        existing.updateDetails("Nguyen Van A", "avatar.png", "123 Le Loi", "Quan 7",
+        existing.updateDetails("Nguyen Van A", "avatar.png", "123 Le Loi", null, "Quan 7",
                 BigDecimal.valueOf(10.75), BigDecimal.valueOf(106.66), originalUpdatedAt);
         when(repository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(existing));
 
-        UpdateProfileRequest emptyRequest = requestOf(null, null, null, null, null, null);
+        UpdateProfileRequest emptyRequest = requestOf(null, null, null, null, null, null, null);
         UserProfile result = service.upsertProfile(ACCOUNT_ID, emptyRequest);
 
         assertThat(result.getUpdatedAt()).isEqualTo(originalUpdatedAt);
@@ -133,7 +139,7 @@ class UserProfileServiceTest {
         when(repository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(existing));
         when(repository.save(any(UserProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        UpdateProfileRequest request = requestOf("Nguyen Van A", "avatar.png", null, "Quan 7", null, null);
+        UpdateProfileRequest request = requestOf("Nguyen Van A", "avatar.png", null, null, "Quan 7", null, null);
         UserProfile first = service.upsertProfile(ACCOUNT_ID, request);
         UserProfile second = service.upsertProfile(ACCOUNT_ID, request);
 
@@ -178,7 +184,7 @@ class UserProfileServiceTest {
                 .thenThrow(new DataIntegrityViolationException("uq_user_profiles_account"));
         when(repository.save(any(UserProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        UpdateProfileRequest request = requestOf("Nguoi Thua Race", null, null, "Quan 3", null, null);
+        UpdateProfileRequest request = requestOf("Nguoi Thua Race", null, null, null, "Quan 3", null, null);
         UserProfile result = service.upsertProfile(ACCOUNT_ID, request);
 
         assertThat(result.getFullName()).isEqualTo("Nguoi Thua Race");
