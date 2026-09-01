@@ -6,23 +6,29 @@ import java.time.Duration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import vn.taskconnect.auth.dto.request.ChangePasswordRequest;
 import vn.taskconnect.auth.dto.request.ForgotPasswordRequest;
+import vn.taskconnect.auth.dto.request.GrantAdminRoleRequest;
 import vn.taskconnect.auth.dto.request.LoginRequest;
 import vn.taskconnect.auth.dto.request.RegisterRequest;
 import vn.taskconnect.auth.dto.request.ResendVerificationRequest;
 import vn.taskconnect.auth.dto.request.ResetPasswordRequest;
+import vn.taskconnect.auth.dto.request.RevokeAdminRoleRequest;
 import vn.taskconnect.auth.dto.request.VerifyEmailRequest;
 import vn.taskconnect.auth.dto.response.ForgotPasswordResponse;
 import vn.taskconnect.auth.dto.response.ResendVerificationResponse;
 import vn.taskconnect.auth.dto.response.TokenResponse;
 import vn.taskconnect.auth.service.AuthService;
 import vn.taskconnect.common.response.ApiResponse;
+import vn.taskconnect.security.jwt.AuthenticatedPrincipal;
 import vn.taskconnect.security.jwt.JwtProperties;
 
 @RestController
@@ -127,5 +133,45 @@ public class AuthController {
     public ApiResponse<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
         return ApiResponse.ok(null, "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.");
+    }
+
+    /**
+     * Doi mat khau khi da dang nhap. Nam duoi /api/v1/auth (PUBLIC_ENDPOINTS o SecurityConfig
+     * cho phep moi request toi day di qua tang filter chain), nhung @PreAuthorize van chan
+     * dung request khong kem access token hop le - JwtAuthenticationFilter luon chay truoc,
+     * doc Authorization header bat ke duong dan co nam trong PUBLIC_ENDPOINTS hay khong.
+     * Thu hoi het refresh token (xem AuthService.changePassword) nen xoa luon cookie phien
+     * hien tai, giong het cach logout() dang lam.
+     */
+    @PostMapping("/change-password")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<Void> changePassword(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @Valid @RequestBody ChangePasswordRequest request, HttpServletResponse response) {
+        authService.changePassword(principal.accountId(), request);
+        response.addHeader(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString());
+        return ApiResponse.ok(null, "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.");
+    }
+
+    /**
+     * Chi super-admin: gan role ADMIN cho tai khoan co email trong request. Yeu cau
+     * hasRole('ADMIN') o day chi loc bot request tu tai khoan khong phai admin nao ca -
+     * kiem tra "co dung la super-admin hay khong" nam o AuthService.grantAdminRole(), vi
+     * admin thuong cung mang ROLE_ADMIN nhung khong duoc phep goi endpoint nay.
+     */
+    @PostMapping("/admins/grant")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<Void> grantAdminRole(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @Valid @RequestBody GrantAdminRoleRequest request) {
+        authService.grantAdminRole(principal.accountId(), request);
+        return ApiResponse.ok(null, "Đã gán quyền quản trị.");
+    }
+
+    /** Chi super-admin: thu hoi role ADMIN cua tai khoan co email trong request. */
+    @PostMapping("/admins/revoke")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<Void> revokeAdminRole(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @Valid @RequestBody RevokeAdminRoleRequest request) {
+        authService.revokeAdminRole(principal.accountId(), request);
+        return ApiResponse.ok(null, "Đã thu hồi quyền quản trị.");
     }
 }

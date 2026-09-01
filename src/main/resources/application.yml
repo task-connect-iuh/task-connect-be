@@ -29,6 +29,11 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     validate-migration-naming: true
+    placeholders:
+      # Nap vao V10__seed_admin_account.sql - KHONG dat default, thieu bien thi app khong
+      # khoi dong duoc (giong JWT_SECRET/DB_PASSWORD), tranh seed nham email/hash rong.
+      adminEmail: ${ADMIN_SEED_EMAIL}
+      adminPasswordHash: ${ADMIN_SEED_PASSWORD_HASH}
 
   data:
     redis:
@@ -96,6 +101,29 @@ app:
     # Domain FE duoc phep goi API kem cookie (Access-Control-Allow-Credentials=true doi
     # hoi origin cu the, khong duoc dung "*"). Doi sang domain that khi len production.
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+  admin:
+    # Email tai khoan super-admin duy nhat - AuthService so khop email nay o tang service de
+    # nhan dien super-admin (khong dung role rieng trong schema), xem
+    # docs/PROGRESS-ADMIN-MODULE.md "Cac quyet dinh da chot". Cung bien dung de seed
+    # V10__seed_admin_account.sql qua flyway.placeholders o tren - phai khop nhau.
+    super-admin-email: ${ADMIN_SEED_EMAIL}
+
+  crypto:
+    # Bat buoc set qua bien moi truong. Khac JWT_SECRET (chi ky, xoay vong duoc), khoa nay
+    # ma hoa du lieu luu lau dai (CCCD, chung chi) - doi khoa se khong giai ma duoc du lieu
+    # cu, nen KHONG duoc de trong o bat ky moi truong nao. Sinh khoa moi: openssl rand -base64 32
+    key: ${APP_CRYPTO_KEY}
+
+aws:
+  s3:
+    # Bat buoc set qua bien moi truong, khong dat default: sai bucket/khoa se upload
+    # nham hoac loi 403 ngay khi goi, ro rang hon la im lang chay voi gia tri rong.
+    # Xem docs/adr/ADR-003-avatar-storage-s3-presigned-upload.md.
+    region: ${AWS_S3_REGION:ap-southeast-1}
+    bucket: ${AWS_S3_BUCKET}
+    access-key-id: ${AWS_S3_ACCESS_KEY_ID}
+    secret-access-key: ${AWS_S3_SECRET_ACCESS_KEY}
 
 server:
   port: ${SERVER_PORT:8080}

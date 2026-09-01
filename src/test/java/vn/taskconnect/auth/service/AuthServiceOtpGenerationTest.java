@@ -14,6 +14,7 @@ import vn.taskconnect.auth.repository.AuthAccountRoleRepository;
 import vn.taskconnect.auth.repository.AuthEmailVerificationTokenRepository;
 import vn.taskconnect.auth.repository.AuthPasswordResetTokenRepository;
 import vn.taskconnect.auth.repository.AuthRefreshTokenRepository;
+import vn.taskconnect.security.AdminProperties;
 import vn.taskconnect.security.jwt.JwtProperties;
 import vn.taskconnect.security.jwt.JwtTokenProvider;
 
@@ -34,6 +35,7 @@ class AuthServiceOtpGenerationTest {
                 mock(PasswordEncoder.class),
                 mock(JwtTokenProvider.class),
                 new JwtProperties("test-secret", 15, 15, false),
+                new AdminProperties("admin@taskconnect.vn"),
                 mock(ApplicationEventPublisher.class),
                 Clock.systemUTC());
     }
