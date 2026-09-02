@@ -212,6 +212,25 @@ class AuthPasswordResetServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void should_activateAccount_when_resetPasswordSucceedsForUnverifiedAccount() {
+        String email = uniqueEmail("unverified-reset");
+        authService.register(registerRequest(email));
+        reset(emailSender);
+
+        authService.forgotPassword(new ForgotPasswordRequest(email));
+        String otp = captureLatestOtp(email);
+        authService.resetPassword(new ResetPasswordRequest(email, otp, "MatKhauMoi@123", "MatKhauMoi@123"));
+
+        AuthAccount account = accountRepository.findByEmail(email).orElseThrow();
+        assertThat(account.getStatus())
+                .as("OTP gui toi email la bang chung xac minh email, tai khoan phai duoc kich hoat luon")
+                .isEqualTo(AccountStatus.ACTIVE);
+
+        TokenResponse tokens = authService.login(new LoginRequest(email, "MatKhauMoi@123"));
+        assertThat(tokens.accessToken()).isNotBlank();
+    }
+
+    @Test
     void should_notSendMail_when_accountSuspended() {
         String email = registerActiveAccount("suspended");
         suspendAccount(email);
