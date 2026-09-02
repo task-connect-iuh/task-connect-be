@@ -37,10 +37,12 @@ Cong bi trung tren may thi doi trong `.env`, khong sua `docker-compose.yml`.
 ## Migration
 
 Flyway chay tu dong khi ung dung khoi dong, doc tu
-`src/main/resources/db/migration`. Hien co `V1__create_auth_tables.sql` (module Auth),
-`V2__create_user_tables.sql` (module User), va
-`V3__add_otp_to_email_verification_tokens.sql` (doi xac minh email tu token dang lien
-ket sang ma OTP 6 chu so).
+`src/main/resources/db/migration`. Hien co `V1` (bang goc Auth), `V2` (bang goc User),
+`V3` (doi xac minh email sang OTP), `V4`/`V5` (seed danh muc dich vu/loai chung chi),
+`V6`-`V8` (bang quen mat khau + doi/hoan quy uoc luu UTC+7), `V9` (them `bio` vao ho so),
+`V10` (seed tai khoan super-admin duy nhat - xem `docs/PROGRESS-ADMIN-MODULE.md`, dung
+placeholder `${adminEmail}`/`${adminPasswordHash}` nap tu `ADMIN_SEED_EMAIL`/
+`ADMIN_SEED_PASSWORD_HASH` trong `.env` - thieu bien nay app khong khoi dong duoc).
 
 Muon chay bang tay bang Flyway CLI trong container:
 

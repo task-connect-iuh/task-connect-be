@@ -24,11 +24,14 @@ import vn.taskconnect.auth.api.AccountRole;
 import vn.taskconnect.auth.api.AccountStatus;
 import vn.taskconnect.auth.api.event.EmailVerificationRequestedEvent;
 import vn.taskconnect.auth.api.event.PasswordResetRequestedEvent;
+import vn.taskconnect.auth.dto.request.ChangePasswordRequest;
 import vn.taskconnect.auth.dto.request.ForgotPasswordRequest;
+import vn.taskconnect.auth.dto.request.GrantAdminRoleRequest;
 import vn.taskconnect.auth.dto.request.LoginRequest;
 import vn.taskconnect.auth.dto.request.RegisterRequest;
 import vn.taskconnect.auth.dto.request.ResendVerificationRequest;
 import vn.taskconnect.auth.dto.request.ResetPasswordRequest;
+import vn.taskconnect.auth.dto.request.RevokeAdminRoleRequest;
 import vn.taskconnect.auth.dto.request.VerifyEmailRequest;
 import vn.taskconnect.auth.dto.response.ForgotPasswordResponse;
 import vn.taskconnect.auth.dto.response.ResendVerificationResponse;
@@ -45,6 +48,7 @@ import vn.taskconnect.auth.repository.AuthPasswordResetTokenRepository;
 import vn.taskconnect.auth.repository.AuthRefreshTokenRepository;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
+import vn.taskconnect.security.AdminProperties;
 import vn.taskconnect.security.jwt.JwtProperties;
 import vn.taskconnect.security.jwt.JwtTokenProvider;
 
@@ -83,14 +87,15 @@ public class AuthService {
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
     private final Duration refreshTokenTtl;
+    private final String superAdminEmail;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public AuthService(AuthAccountRepository accountRepository, AuthAccountRoleRepository accountRoleRepository,
             AuthRefreshTokenRepository refreshTokenRepository,
             AuthEmailVerificationTokenRepository verificationTokenRepository,
             AuthPasswordResetTokenRepository passwordResetTokenRepository, PasswordEncoder passwordEncoder,
-            JwtTokenProvider tokenProvider, JwtProperties jwtProperties, ApplicationEventPublisher eventPublisher,
-            Clock clock) {
+            JwtTokenProvider tokenProvider, JwtProperties jwtProperties, AdminProperties adminProperties,
+            ApplicationEventPublisher eventPublisher, Clock clock) {
         this.accountRepository = accountRepository;
         this.accountRoleRepository = accountRoleRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -101,6 +106,7 @@ public class AuthService {
         this.eventPublisher = eventPublisher;
         this.clock = clock;
         this.refreshTokenTtl = Duration.ofDays(jwtProperties.refreshTokenTtlDays());
+        this.superAdminEmail = normalizeEmail(adminProperties.superAdminEmail());
     }
 
     /**
@@ -422,6 +428,95 @@ public class AuthService {
 
         refreshTokenRepository.findByAccountIdAndRevokedAtIsNull(account.getId())
                 .forEach(refreshToken -> refreshToken.revoke(now));
+    }
+
+    /**
+     * Doi mat khau khi da dang nhap - khac resetPassword: xac minh quyen so huu bang chinh
+     * mat khau hien tai, khong can OTP email. Thanh cong thu hoi toan bo refresh token dang
+     * hieu luc cua tai khoan (dang xuat khoi moi thiet bi, ke ca phien hien tai) - cung ly do
+     * bao mat nhu resetPassword: mat khau vua doi thi phien cu (dung mat khau cu de dang
+     * nhap lai qua refresh token) khong nen tiep tuc song, nguoi dung tu dang nhap lai bang
+     * mat khau moi.
+     */
+    @Transactional
+    public void changePassword(UUID accountId, ChangePasswordRequest request) {
+        if (!request.newPassword().equals(request.confirmNewPassword())) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Mật khẩu xác nhận không khớp.");
+        }
+
+        AuthAccount account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHENTICATED));
+
+        if (!passwordEncoder.matches(request.currentPassword(), account.getPasswordHash())) {
+            throw new BusinessException(ErrorCode.INVALID_CURRENT_PASSWORD);
+        }
+
+        Instant now = clock.instant();
+        account.resetPassword(passwordEncoder.encode(request.newPassword()), now);
+        accountRepository.save(account);
+
+        refreshTokenRepository.findByAccountIdAndRevokedAtIsNull(accountId)
+                .forEach(refreshToken -> refreshToken.revoke(now));
+    }
+
+    /**
+     * Gan role ADMIN cho tai khoan co email trong request. Chi super-admin (tai khoan co
+     * email khop app.admin.super-admin-email) duoc goi - kiem tra ngay tai day thay vi chi
+     * dua vao @PreAuthorize("hasRole('ADMIN')") o controller, vi admin thuong cung mang
+     * ROLE_ADMIN nhung khong duoc phep gan/thu hoi quyen cua tai khoan khac (xem
+     * docs/PROGRESS-ADMIN-MODULE.md "Mo hinh phan quyen: mot super-admin duy nhat").
+     */
+    @Transactional
+    public void grantAdminRole(UUID actorAccountId, GrantAdminRoleRequest request) {
+        requireSuperAdmin(actorAccountId);
+
+        AuthAccount target = accountRepository.findByEmail(normalizeEmail(request.email()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        if (accountRoleRepository.existsByAccountIdAndRole(target.getId(), AccountRole.ADMIN)) {
+            throw new BusinessException(ErrorCode.ROLE_ALREADY_GRANTED);
+        }
+
+        accountRoleRepository.save(
+                new AuthAccountRole(UUID.randomUUID(), target.getId(), AccountRole.ADMIN, clock.instant()));
+    }
+
+    /**
+     * Thu hoi role ADMIN cua tai khoan co email trong request. Chan cung neu dich la chinh
+     * super-admin - tai khoan nay khong bao gio duoc phep mat role ADMIN qua endpoint, tranh
+     * he thong tu khoa mat kha nang quan tri (xem quyet dinh da chot). Kiem tra bang so sanh
+     * email truoc, khong can tra DB - nhanh hon va van dung ke ca super-admin tu doi email
+     * cho chinh minh trong request truoc khi tim thay trong DB.
+     */
+    @Transactional
+    public void revokeAdminRole(UUID actorAccountId, RevokeAdminRoleRequest request) {
+        requireSuperAdmin(actorAccountId);
+
+        String targetEmail = normalizeEmail(request.email());
+        if (targetEmail.equals(superAdminEmail)) {
+            throw new BusinessException(ErrorCode.CANNOT_REVOKE_SUPER_ADMIN);
+        }
+
+        AuthAccount target = accountRepository.findByEmail(targetEmail)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        long deleted = accountRoleRepository.deleteByAccountIdAndRole(target.getId(), AccountRole.ADMIN);
+        if (deleted == 0) {
+            throw new BusinessException(ErrorCode.ROLE_NOT_ASSIGNED);
+        }
+    }
+
+    /**
+     * Xac minh tai khoan dang goi la super-admin duy nhat, nhan dien bang email khop
+     * app.admin.super-admin-email - khong dua vao role trong JWT vi admin thuong cung mang
+     * ROLE_ADMIN nhung khong duoc phep thao tac 2 endpoint gan/thu hoi role.
+     */
+    private void requireSuperAdmin(UUID actorAccountId) {
+        AuthAccount actor = accountRepository.findById(actorAccountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHENTICATED));
+        if (!normalizeEmail(actor.getEmail()).equals(superAdminEmail)) {
+            throw new BusinessException(ErrorCode.NOT_SUPER_ADMIN);
+        }
     }
 
     /**

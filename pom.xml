@@ -21,7 +21,21 @@
         <java.version>17</java.version>
         <springdoc.version>2.8.9</springdoc.version>
         <jjwt.version>0.12.6</jjwt.version>
+        <awssdk.version>2.46.18</awssdk.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- BOM khoa dong bo version cac module con (s3, auth, regions...) cua AWS SDK -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${awssdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- Doc file .env o thu muc goc luc khoi dong, anh xa thanh bien moi truong -->
@@ -118,6 +132,13 @@
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <version>${springdoc.version}</version>
+        </dependency>
+
+        <!-- Luu tru file (avatar, sau nay la anh KYC/chung chi) qua AWS S3, xem
+             docs/adr/ADR-003-avatar-storage-s3-presigned-upload.md -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
         </dependency>
 
         <dependency>
