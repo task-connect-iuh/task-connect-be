@@ -9,6 +9,7 @@ import java.util.Set;
 import vn.taskconnect.auth.api.AccountRole;
 
 public record RegisterRequest(
+        @NotBlank @Size(max = 150) String fullName,
         @NotBlank @Email String email,
         String phone,
         @NotBlank

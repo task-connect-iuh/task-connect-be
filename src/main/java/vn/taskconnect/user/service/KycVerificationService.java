@@ -3,7 +3,9 @@ package vn.taskconnect.user.service;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -117,10 +119,22 @@ public class KycVerificationService {
      * Chi danh cho Admin: hang doi cac lan nop KYC theo status (mac dinh VERIFYING o
      * controller), moi nhat truoc. Tra ve DTO nhe (khong giai ma so CCCD, khong ky presigned
      * URL) - xem chi tiet that su goi getLatestKycForReview() rieng cho dung accountId.
+     *
+     * <p>Enrich them ten that/avatar tu user_profiles (accountFullName/avatarUrl trong DTO) -
+     * fullNameOnId chi la chuoi nguoi dung tu go tren form KYC, khong dai dien cho danh tinh
+     * tai khoan dang dang nhap (co the go sai chinh ta, hoac khong khop ten dang ky). Tim
+     * theo lo bang findByAccountIdIn thay vi goi lai profileRepository trong vong lap, tranh
+     * N+1 query tren mot trang co the toi 100 dong (xem controller, size gioi han o 100).
      */
     @Transactional(readOnly = true)
     public Page<KycReviewSummaryResponse> listForReview(KycStatus status, Pageable pageable) {
-        return kycRepository.findByStatus(status, pageable).map(KycReviewSummaryResponse::from);
+        Page<KycVerification> page = kycRepository.findByStatus(status, pageable);
+        Map<UUID, UserProfile> profileByAccountId = profileRepository
+                .findByAccountIdIn(page.map(KycVerification::getAccountId).toList())
+                .stream()
+                .collect(Collectors.toMap(UserProfile::getAccountId, profile -> profile));
+        return page.map(verification ->
+                KycReviewSummaryResponse.from(verification, profileByAccountId.get(verification.getAccountId())));
     }
 
     /** Admin duyet mot lan nop - chi cho phep khi dang VERIFYING, dong bo sang user_profiles neu co ho so. */

@@ -42,6 +42,7 @@ import vn.taskconnect.user.repository.KycVerificationRepository;
 import vn.taskconnect.user.repository.ServiceCategoryRepository;
 import vn.taskconnect.user.repository.TaskerCertificationRepository;
 import vn.taskconnect.user.repository.TaskerSkillProfileRepository;
+import vn.taskconnect.user.repository.UserProfileRepository;
 
 /**
  * Unit test thuan tuy (khong DB, khong Spring context) cho TaskerSkillService. Dung
@@ -64,11 +65,13 @@ class TaskerSkillServiceTest {
             mock(CategoryCertificateRequirementRepository.class);
     private final ServiceCategoryRepository categoryRepository = mock(ServiceCategoryRepository.class);
     private final KycVerificationRepository kycRepository = mock(KycVerificationRepository.class);
+    private final UserProfileRepository profileRepository = mock(UserProfileRepository.class);
     private final AesEncryptionService encryptionService = new AesEncryptionService(new CryptoProperties(VALID_KEY));
     private final S3PresignedUploadService s3Service = mock(S3PresignedUploadService.class);
     private final Clock clock = Clock.fixed(FIXED_NOW, ZoneOffset.UTC);
     private final TaskerSkillService service = new TaskerSkillService(skillRepository, certificationRepository,
-            requirementRepository, categoryRepository, kycRepository, encryptionService, s3Service, clock);
+            requirementRepository, categoryRepository, kycRepository, profileRepository, encryptionService,
+            s3Service, clock);
 
     private static ServiceCategory activeCategoryOf(UUID id) {
         try {

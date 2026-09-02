@@ -17,6 +17,7 @@ import vn.taskconnect.auth.repository.AuthRefreshTokenRepository;
 import vn.taskconnect.security.AdminProperties;
 import vn.taskconnect.security.jwt.JwtProperties;
 import vn.taskconnect.security.jwt.JwtTokenProvider;
+import vn.taskconnect.user.api.UserFacade;
 
 /**
  * generateOtp() khong dung bat ky dependency nao duoc inject qua constructor (chi dung
@@ -36,6 +37,7 @@ class AuthServiceOtpGenerationTest {
                 mock(JwtTokenProvider.class),
                 new JwtProperties("test-secret", 15, 15, false),
                 new AdminProperties("admin@taskconnect.vn"),
+                mock(UserFacade.class),
                 mock(ApplicationEventPublisher.class),
                 Clock.systemUTC());
     }

@@ -1,16 +1,19 @@
 package vn.taskconnect.auth.controller;
 
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import java.time.Duration;
+import java.util.Set;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,9 +42,22 @@ public class AuthController {
      * Ten va pham vi cookie chua refresh token. Path gioi han dung nhom endpoint auth -
      * cookie khong tu dinh kem o cac request khac (task, booking...), giam dien lo theo
      * 16-api-contract.md.
+     *
+     * <p>Ten cookie phan biet theo header {@code X-App} ("admin" hoac "client", moi FE tu
+     * gan vao moi request toi /auth/*) - {@code refresh_token_admin} va {@code
+     * refresh_token_client}. Ca hai app deu goi chung mot backend o cung origin
+     * (localhost luc dev, cung mot domain API luc production), nen neu dung chung MOT ten
+     * cookie, dang nhap o app nay se ghi de refresh token cua app kia trong cung trinh
+     * duyet - dang nhap admin roi dang nhap client (hoac nguoc lai) se lam phien con lai
+     * bi "danh cap" cookie va bi coi la refresh-token-reuse, tu dong bi thu hoi toan bo
+     * phien. Tach ten cookie theo app giai quyet dut diem, khong can subdomain rieng.
+     * Header thieu hoac gia tri la la mac dinh ve "client".
      */
-    private static final String REFRESH_COOKIE_NAME = "refresh_token";
+    private static final String REFRESH_COOKIE_PREFIX = "refresh_token_";
     private static final String REFRESH_COOKIE_PATH = "/api/v1/auth";
+    private static final String APP_HEADER = "X-App";
+    private static final String DEFAULT_APP = "client";
+    private static final Set<String> KNOWN_APPS = Set.of("admin", "client");
 
     private final AuthService authService;
     private final JwtProperties jwtProperties;
@@ -59,36 +75,62 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
+    public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request,
+            @RequestHeader(name = APP_HEADER, required = false) String app, HttpServletResponse response) {
         TokenResponse tokens = authService.login(request);
-        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie(tokens.refreshToken()).toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie(app, tokens.refreshToken()).toString());
         return ApiResponse.ok(tokens);
     }
 
     @PostMapping("/refresh")
     public ApiResponse<TokenResponse> refresh(
-            @CookieValue(name = REFRESH_COOKIE_NAME, required = false) String refreshToken,
-            HttpServletResponse response) {
+            @RequestHeader(name = APP_HEADER, required = false) String app,
+            HttpServletRequest request, HttpServletResponse response) {
+        String refreshToken = readRefreshCookie(request, app);
         TokenResponse tokens = authService.refresh(refreshToken);
-        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie(tokens.refreshToken()).toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie(app, tokens.refreshToken()).toString());
         return ApiResponse.ok(tokens);
     }
 
     @PostMapping("/logout")
     public ApiResponse<Void> logout(
-            @CookieValue(name = REFRESH_COOKIE_NAME, required = false) String refreshToken,
-            HttpServletResponse response) {
+            @RequestHeader(name = APP_HEADER, required = false) String app,
+            HttpServletRequest request, HttpServletResponse response) {
+        String refreshToken = readRefreshCookie(request, app);
         authService.logout(refreshToken);
-        response.addHeader(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, clearRefreshCookie(app).toString());
         return ApiResponse.ok(null);
+    }
+
+    /** Header X-App thieu hoac gia tri la ("khong phai admin/client") deu coi nhu "client". */
+    private String resolveApp(String app) {
+        return (app != null && KNOWN_APPS.contains(app)) ? app : DEFAULT_APP;
+    }
+
+    private String cookieName(String app) {
+        return REFRESH_COOKIE_PREFIX + resolveApp(app);
+    }
+
+    private String readRefreshCookie(HttpServletRequest request, String app) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return null;
+        }
+        String name = cookieName(app);
+        for (Cookie cookie : cookies) {
+            if (cookie.getName().equals(name)) {
+                return cookie.getValue();
+            }
+        }
+        return null;
     }
 
     /**
      * Dung ResponseCookie thay vi Cookie servlet thuong vi can dat SameSite - lop
      * jakarta.servlet.http.Cookie khong ho tro thuoc tinh nay.
      */
-    private ResponseCookie refreshCookie(String rawToken) {
-        return ResponseCookie.from(REFRESH_COOKIE_NAME, rawToken)
+    private ResponseCookie refreshCookie(String app, String rawToken) {
+        return ResponseCookie.from(cookieName(app), rawToken)
                 .httpOnly(true)
                 .secure(jwtProperties.refreshCookieSecure())
                 .sameSite("Lax")
@@ -97,8 +139,8 @@ public class AuthController {
                 .build();
     }
 
-    private ResponseCookie clearRefreshCookie() {
-        return ResponseCookie.from(REFRESH_COOKIE_NAME, "")
+    private ResponseCookie clearRefreshCookie(String app) {
+        return ResponseCookie.from(cookieName(app), "")
                 .httpOnly(true)
                 .secure(jwtProperties.refreshCookieSecure())
                 .sameSite("Lax")
@@ -146,9 +188,10 @@ public class AuthController {
     @PostMapping("/change-password")
     @PreAuthorize("isAuthenticated()")
     public ApiResponse<Void> changePassword(@AuthenticationPrincipal AuthenticatedPrincipal principal,
-            @Valid @RequestBody ChangePasswordRequest request, HttpServletResponse response) {
+            @Valid @RequestBody ChangePasswordRequest request,
+            @RequestHeader(name = APP_HEADER, required = false) String app, HttpServletResponse response) {
         authService.changePassword(principal.accountId(), request);
-        response.addHeader(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, clearRefreshCookie(app).toString());
         return ApiResponse.ok(null, "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.");
     }
 

@@ -5,7 +5,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -23,13 +25,16 @@ import vn.taskconnect.user.dto.response.CertificationReviewResponse;
 import vn.taskconnect.user.dto.response.CertificationReviewSummaryResponse;
 import vn.taskconnect.user.dto.response.TaskerSkillResponse;
 import vn.taskconnect.user.entity.CategoryCertificateRequirement;
+import vn.taskconnect.user.entity.ServiceCategory;
 import vn.taskconnect.user.entity.TaskerCertification;
 import vn.taskconnect.user.entity.TaskerSkillProfile;
+import vn.taskconnect.user.entity.UserProfile;
 import vn.taskconnect.user.repository.CategoryCertificateRequirementRepository;
 import vn.taskconnect.user.repository.KycVerificationRepository;
 import vn.taskconnect.user.repository.ServiceCategoryRepository;
 import vn.taskconnect.user.repository.TaskerCertificationRepository;
 import vn.taskconnect.user.repository.TaskerSkillProfileRepository;
+import vn.taskconnect.user.repository.UserProfileRepository;
 
 /**
  * Nghiep vu dang ky ky nang Tasker gop nop chung chi (Buoc 6) - mot giao dien, mot lan
@@ -49,6 +54,7 @@ public class TaskerSkillService {
     private final CategoryCertificateRequirementRepository requirementRepository;
     private final ServiceCategoryRepository categoryRepository;
     private final KycVerificationRepository kycRepository;
+    private final UserProfileRepository profileRepository;
     private final AesEncryptionService encryptionService;
     private final S3PresignedUploadService s3Service;
     private final Clock clock;
@@ -57,12 +63,14 @@ public class TaskerSkillService {
             TaskerCertificationRepository certificationRepository,
             CategoryCertificateRequirementRepository requirementRepository,
             ServiceCategoryRepository categoryRepository, KycVerificationRepository kycRepository,
-            AesEncryptionService encryptionService, S3PresignedUploadService s3Service, Clock clock) {
+            UserProfileRepository profileRepository, AesEncryptionService encryptionService,
+            S3PresignedUploadService s3Service, Clock clock) {
         this.skillRepository = skillRepository;
         this.certificationRepository = certificationRepository;
         this.requirementRepository = requirementRepository;
         this.categoryRepository = categoryRepository;
         this.kycRepository = kycRepository;
+        this.profileRepository = profileRepository;
         this.encryptionService = encryptionService;
         this.s3Service = s3Service;
         this.clock = clock;
@@ -135,11 +143,28 @@ public class TaskerSkillService {
      * PENDING_REVIEW), xuyen suot moi tai khoan/category, moi nhat truoc. Tra ve DTO nhe
      * (khong giai ma so hieu chung chi, khong ky presigned URL) - xem chi tiet that su goi
      * getCertificationsForReview(accountId, categoryId) rieng.
+     *
+     * <p>Enrich them ten that/avatar tu user_profiles va ten nhom dich vu tu
+     * user_service_categories - FE truoc gio hien thang accountId/categoryId dang UUID tho o
+     * cot "Tai khoan"/"Nhom dich vu", khong dung lam nghia cho nguoi xet duyet. Tim theo lo
+     * (findByAccountIdIn/findAllById) thay vi goi lai repository trong vong lap, tranh N+1
+     * tren mot trang co the toi 100 dong.
      */
     @Transactional(readOnly = true)
     public Page<CertificationReviewSummaryResponse> listCertificationsForReview(CertificationStatus status,
             Pageable pageable) {
-        return certificationRepository.findByStatus(status, pageable).map(CertificationReviewSummaryResponse::from);
+        Page<TaskerCertification> page = certificationRepository.findByStatus(status, pageable);
+        Map<UUID, UserProfile> profileByAccountId = profileRepository
+                .findByAccountIdIn(page.map(TaskerCertification::getAccountId).toList())
+                .stream()
+                .collect(Collectors.toMap(UserProfile::getAccountId, profile -> profile));
+        Map<UUID, ServiceCategory> categoryById = categoryRepository
+                .findAllById(page.map(TaskerCertification::getCategoryId).toList())
+                .stream()
+                .collect(Collectors.toMap(ServiceCategory::getId, category -> category));
+        return page.map(certification -> CertificationReviewSummaryResponse.from(certification,
+                profileByAccountId.get(certification.getAccountId()),
+                categoryById.get(certification.getCategoryId())));
     }
 
     /** Admin duyet mot lan nop chung chi - chuyen ca chung chi lan ho so ky nang cua category do sang VERIFIED. */

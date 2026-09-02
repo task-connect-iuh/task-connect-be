@@ -33,6 +33,7 @@ import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.security.AdminProperties;
 import vn.taskconnect.security.jwt.JwtProperties;
 import vn.taskconnect.security.jwt.JwtTokenProvider;
+import vn.taskconnect.user.api.UserFacade;
 
 /**
  * Unit test thuan tuy (khong DB, khong Spring context) cho AuthService.grantAdminRole()/
@@ -60,6 +61,7 @@ class AuthServiceAdminRoleTest {
             mock(JwtTokenProvider.class),
             new JwtProperties("test-secret", 15, 15, false),
             new AdminProperties(SUPER_ADMIN_EMAIL),
+            mock(UserFacade.class),
             mock(ApplicationEventPublisher.class),
             clock);
 

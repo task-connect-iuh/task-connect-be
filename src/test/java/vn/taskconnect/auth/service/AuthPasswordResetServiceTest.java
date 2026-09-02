@@ -251,7 +251,7 @@ class AuthPasswordResetServiceTest extends AbstractIntegrationTest {
     }
 
     private RegisterRequest registerRequest(String email) {
-        return new RegisterRequest(email, null, "Matkhau@123", "Matkhau@123", Set.of(AccountRole.TASK_POSTER));
+        return new RegisterRequest("Nguyen Van A", email, null, "Matkhau@123", "Matkhau@123", Set.of(AccountRole.TASK_POSTER));
     }
 
     private String uniqueEmail(String tag) {

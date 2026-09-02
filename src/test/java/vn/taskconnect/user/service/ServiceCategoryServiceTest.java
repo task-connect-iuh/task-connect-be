@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -66,7 +67,7 @@ class ServiceCategoryServiceTest {
         ServiceCategory dienLanh = categoryOf(categoryId, "DIEN_LANH", "Điện lạnh", 2);
         UserProfileRepository profileRepository = mock(UserProfileRepository.class);
         when(repository.findByActiveTrueOrderByNameAsc()).thenReturn(List.of(dienLanh));
-        UserFacadeImpl facade = new UserFacadeImpl(profileRepository, repository);
+        UserFacadeImpl facade = new UserFacadeImpl(profileRepository, repository, Clock.systemUTC());
 
         List<ServiceCategorySummary> result = facade.listActiveServiceCategories();
 

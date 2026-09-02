@@ -54,7 +54,7 @@ class AuthCookieApiTest extends AbstractIntegrationTest {
                         .content(registerBody(uniqueEmail())))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data").doesNotExist())
-                .andExpect(cookie().doesNotExist("refresh_token"));
+                .andExpect(cookie().doesNotExist("refresh_token_client"));
     }
 
     @Test
@@ -67,9 +67,9 @@ class AuthCookieApiTest extends AbstractIntegrationTest {
                         .content(loginBody(email)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
-                .andExpect(cookie().exists("refresh_token"))
-                .andExpect(cookie().httpOnly("refresh_token", true))
-                .andExpect(cookie().path("refresh_token", "/api/v1/auth"));
+                .andExpect(cookie().exists("refresh_token_client"))
+                .andExpect(cookie().httpOnly("refresh_token_client", true))
+                .andExpect(cookie().path("refresh_token_client", "/api/v1/auth"));
     }
 
     @Test
@@ -79,8 +79,8 @@ class AuthCookieApiTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/refresh").cookie(refreshCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
-                .andExpect(cookie().exists("refresh_token"))
-                .andExpect(cookie().httpOnly("refresh_token", true));
+                .andExpect(cookie().exists("refresh_token_client"))
+                .andExpect(cookie().httpOnly("refresh_token_client", true));
     }
 
     @Test
@@ -109,7 +109,7 @@ class AuthCookieApiTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/v1/auth/logout").cookie(refreshCookie))
                 .andExpect(status().isOk())
-                .andExpect(cookie().maxAge("refresh_token", 0));
+                .andExpect(cookie().maxAge("refresh_token_client", 0));
     }
 
     private Cookie loginAndGetRefreshCookie() throws Exception {
@@ -122,7 +122,7 @@ class AuthCookieApiTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        Cookie refreshCookie = result.getResponse().getCookie("refresh_token");
+        Cookie refreshCookie = result.getResponse().getCookie("refresh_token_client");
         assertThat(refreshCookie).isNotNull();
         return refreshCookie;
     }
@@ -157,7 +157,7 @@ class AuthCookieApiTest extends AbstractIntegrationTest {
     }
 
     private String registerBody(String email) {
-        return "{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\","
+        return "{\"fullName\":\"Nguyen Van A\",\"email\":\"" + email + "\",\"password\":\"" + PASSWORD + "\","
                 + "\"confirmPassword\":\"" + PASSWORD + "\",\"roles\":[\"TASK_POSTER\"]}";
     }
 

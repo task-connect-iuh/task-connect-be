@@ -23,4 +23,12 @@ public interface UserFacade {
      * danh sach chon luc dang cong viec, hoac Matching can loc theo nhom.
      */
     List<ServiceCategorySummary> listActiveServiceCategories();
+
+    /**
+     * Tao khung ho so ban dau ngay khi tai khoan duoc dang ky, voi ho ten nguoi dung da
+     * nhap o form dang ky. operatingArea de rong - nguoi dung tu dien khi vao trang Ho so
+     * (khong thu thap duoc o form dang ky). Idempotent: bo qua neu tai khoan da co ho so
+     * (khong ghi de len du lieu da ton tai).
+     */
+    void createInitialProfile(UUID accountId, String fullName);
 }

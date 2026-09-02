@@ -51,6 +51,7 @@ import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.security.AdminProperties;
 import vn.taskconnect.security.jwt.JwtProperties;
 import vn.taskconnect.security.jwt.JwtTokenProvider;
+import vn.taskconnect.user.api.UserFacade;
 
 /**
  * Nghiep vu dang ky, dang nhap, refresh, logout va xac minh email cua module Auth.
@@ -84,6 +85,7 @@ public class AuthService {
     private final AuthPasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
+    private final UserFacade userFacade;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
     private final Duration refreshTokenTtl;
@@ -95,7 +97,7 @@ public class AuthService {
             AuthEmailVerificationTokenRepository verificationTokenRepository,
             AuthPasswordResetTokenRepository passwordResetTokenRepository, PasswordEncoder passwordEncoder,
             JwtTokenProvider tokenProvider, JwtProperties jwtProperties, AdminProperties adminProperties,
-            ApplicationEventPublisher eventPublisher, Clock clock) {
+            UserFacade userFacade, ApplicationEventPublisher eventPublisher, Clock clock) {
         this.accountRepository = accountRepository;
         this.accountRoleRepository = accountRoleRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -103,6 +105,7 @@ public class AuthService {
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
+        this.userFacade = userFacade;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
         this.refreshTokenTtl = Duration.ofDays(jwtProperties.refreshTokenTtlDays());
@@ -152,6 +155,8 @@ public class AuthService {
         for (AccountRole role : request.roles()) {
             accountRoleRepository.save(new AuthAccountRole(UUID.randomUUID(), account.getId(), role, now));
         }
+
+        userFacade.createInitialProfile(account.getId(), request.fullName().trim());
 
         issueAndDispatchVerificationOtp(account, now);
     }
