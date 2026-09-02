@@ -183,6 +183,14 @@ public class AuthService {
         if (!passwordEncoder.matches(request.password(), account.getPasswordHash())) {
             account.registerFailedLogin(now, MAX_FAILED_LOGIN_ATTEMPTS, LOCK_DURATION);
             accountRepository.save(account);
+            // Khong tra thong diep rieng theo so lan sai (vd "con N lan thu"): tai khoan
+            // khong ton tai thi khong co failedLoginCount de dem, message se khac nhau giua
+            // 2 truong hop va lo ngay email nao da dang ky - xem PROGRESS.md muc kiem chung
+            // "khong lo email nao da dang ky". Canh bao truoc-khoa hien o FE, dua tren so
+            // lan submit sai lien tiep tai form, khong dua vao phan hoi backend.
+            if (account.isLocked(now)) {
+                throw new BusinessException(ErrorCode.ACCOUNT_LOCKED);
+            }
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
 
