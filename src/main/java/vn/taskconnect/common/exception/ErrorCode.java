@@ -76,6 +76,12 @@ public enum ErrorCode {
             "Tài khoản này chưa có quyền quản trị."),
     CANNOT_REVOKE_SUPER_ADMIN("AUTH-409-CANNOT_REVOKE_SUPER_ADMIN", HttpStatus.CONFLICT,
             "Không thể thu hồi quyền quản trị của super-admin."),
+    INVALID_GOOGLE_TOKEN("AUTH-401-INVALID_GOOGLE_TOKEN", HttpStatus.UNAUTHORIZED,
+            "Không xác thực được tài khoản Google. Vui lòng thử lại."),
+    GOOGLE_EMAIL_NOT_VERIFIED("AUTH-403-GOOGLE_EMAIL_NOT_VERIFIED", HttpStatus.FORBIDDEN,
+            "Email Google của bạn chưa được xác thực. Vui lòng xác thực email với Google trước."),
+    GOOGLE_LINK_CONFIRMATION_REQUIRED("AUTH-409-GOOGLE_LINK_CONFIRMATION_REQUIRED", HttpStatus.CONFLICT,
+            "Email này đã có tài khoản. Bạn có muốn bật đăng nhập bằng Google cho tài khoản này không?"),
 
     // --- USR ---
     MISSING_OPERATING_AREA("USR-400-MISSING_OPERATING_AREA", HttpStatus.BAD_REQUEST,
