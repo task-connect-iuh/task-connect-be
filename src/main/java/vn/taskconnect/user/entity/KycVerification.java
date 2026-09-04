@@ -43,6 +43,13 @@ public class KycVerification {
     @Column(name = "id_number_enc", columnDefinition = "VARBINARY(512)", nullable = false, updatable = false)
     private byte[] idNumberEnc;
 
+    // Sinh bang SHA-256 (deterministic) tu so CCCD, KHAC idNumberEnc (AES-GCM, non-deterministic
+    // nen khong dung de tra cuu/doi chieu trung lap duoc). Dung de chong CCCD trung giua cac tai
+    // khoan khac nhau qua user_kyc_id_number_locks, xem KycVerificationService.submitKyc.
+    @JdbcTypeCode(SqlTypes.VARBINARY)
+    @Column(name = "id_number_hash", columnDefinition = "BINARY(32)", nullable = false, updatable = false)
+    private byte[] idNumberHash;
+
     @JdbcTypeCode(SqlTypes.VARBINARY)
     @Column(name = "id_card_front_url_enc", columnDefinition = "VARBINARY(1024)", nullable = false, updatable = false)
     private byte[] idCardFrontUrlEnc;
@@ -73,12 +80,13 @@ public class KycVerification {
     }
 
     /** Tao mot lan nop moi, luon bat dau o trang thai VERIFYING (default cua cot trong V2). */
-    public KycVerification(UUID id, UUID accountId, String fullNameOnId, byte[] idNumberEnc,
+    public KycVerification(UUID id, UUID accountId, String fullNameOnId, byte[] idNumberEnc, byte[] idNumberHash,
             byte[] idCardFrontUrlEnc, byte[] idCardBackUrlEnc, Instant submittedAt) {
         this.id = id;
         this.accountId = accountId;
         this.fullNameOnId = fullNameOnId;
         this.idNumberEnc = idNumberEnc;
+        this.idNumberHash = idNumberHash;
         this.idCardFrontUrlEnc = idCardFrontUrlEnc;
         this.idCardBackUrlEnc = idCardBackUrlEnc;
         this.status = KycStatus.VERIFYING;
@@ -126,6 +134,11 @@ public class KycVerification {
     /** So CCCD da ma hoa (blob IV+ciphertext+tag), giai ma bang AesEncryptionService khi can hien thi. */
     public byte[] getIdNumberEnc() {
         return idNumberEnc;
+    }
+
+    /** Hash SHA-256 (deterministic) cua so CCCD, dung de tra cuu/doi chieu trung lap giua cac tai khoan. */
+    public byte[] getIdNumberHash() {
+        return idNumberHash;
     }
 
     /** Object key S3 (da ma hoa) cua anh mat truoc CCCD, khong phai URL cong khai. */

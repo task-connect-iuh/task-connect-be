@@ -104,6 +104,8 @@ public enum ErrorCode {
             "Hồ sơ này không ở trạng thái chờ duyệt."),
     KYC_NOT_VERIFIED("USR-403-KYC_NOT_VERIFIED", HttpStatus.FORBIDDEN,
             "Bạn cần xác minh danh tính (KYC) trước khi đăng ký kỹ năng."),
+    KYC_ID_NUMBER_ALREADY_USED("USR-409-KYC_ID_NUMBER_ALREADY_USED", HttpStatus.CONFLICT,
+            "Số CCCD này đã được dùng để xác minh cho một tài khoản khác."),
     CATEGORY_NOT_FOUND("USR-404-CATEGORY_NOT_FOUND", HttpStatus.NOT_FOUND,
             "Không tìm thấy nhóm dịch vụ."),
     INVALID_CERTIFICATE_TYPE_FOR_CATEGORY("USR-400-INVALID_CERTIFICATE_TYPE_FOR_CATEGORY", HttpStatus.BAD_REQUEST,

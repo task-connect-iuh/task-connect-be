@@ -245,6 +245,11 @@ public class AuthService {
      * Tao tai khoan Google moi (chua tung dang nhap Google, khong trung email ai ca), gan du
      * 2 role TASK_POSTER + TASKER giong register() (quyet dinh da chot: tai khoan tu dang ky
      * luon mang ca 2 vai tro), roi cap token ngay - khong qua OTP.
+     *
+     * <p>Tao luon ho so ban dau (createInitialProfile) giong register(), dung email lam
+     * fullName tam: Google ID token (Google Identity Services, xem loginWithGoogle()) khong
+     * mang theo name claim (chi googleId/email/emailVerified, xem GoogleProfile), nen khong
+     * co ten that de dien - nguoi dung tu sua lai ten that tren trang Ho so sau.
      */
     private TokenResponse createGoogleAccount(String email, String googleId) {
         Instant now = clock.instant();
@@ -258,6 +263,8 @@ public class AuthService {
         for (AccountRole role : List.of(AccountRole.TASK_POSTER, AccountRole.TASKER)) {
             accountRoleRepository.save(new AuthAccountRole(UUID.randomUUID(), account.getId(), role, now));
         }
+
+        userFacade.createInitialProfile(account.getId(), email);
 
         return issueTokens(account, rolesOf(account.getId()));
     }
