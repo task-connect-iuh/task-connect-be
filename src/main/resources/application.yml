@@ -109,6 +109,12 @@ app:
     # V10__seed_admin_account.sql qua flyway.placeholders o tren - phai khop nhau.
     super-admin-email: ${ADMIN_SEED_EMAIL}
 
+  google:
+    # Client ID cua OAuth 2.0 Client (loai Web application) tao trong Google Cloud Console.
+    # BAT BUOC set qua bien moi truong, khong dat default - GoogleIdTokenVerifier dung gia
+    # tri nay lam audience, thieu se cho phep token cua bat ky client Google nao khac.
+    client-id: ${GOOGLE_CLIENT_ID}
+
   crypto:
     # Bat buoc set qua bien moi truong. Khac JWT_SECRET (chi ky, xoay vong duoc), khoa nay
     # ma hoa du lieu luu lau dai (CCCD, chung chi) - doi khoa se khong giai ma duoc du lieu

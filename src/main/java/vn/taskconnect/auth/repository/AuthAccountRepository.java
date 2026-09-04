@@ -14,6 +14,9 @@ public interface AuthAccountRepository extends JpaRepository<AuthAccount, UUID> 
 
     Optional<AuthAccount> findByEmail(String email);
 
+    /** Tim tai khoan da tung dang nhap Google truoc do, dung de nhan biet lan dang nhap lai. */
+    Optional<AuthAccount> findByGoogleId(String googleId);
+
     boolean existsByEmail(String email);
 
     boolean existsByPhone(String phone);
