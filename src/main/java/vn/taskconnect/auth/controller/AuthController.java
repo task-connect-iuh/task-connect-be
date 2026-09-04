@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import vn.taskconnect.auth.dto.request.ChangePasswordRequest;
 import vn.taskconnect.auth.dto.request.ForgotPasswordRequest;
+import vn.taskconnect.auth.dto.request.GoogleLoginRequest;
 import vn.taskconnect.auth.dto.request.GrantAdminRoleRequest;
 import vn.taskconnect.auth.dto.request.LoginRequest;
 import vn.taskconnect.auth.dto.request.RegisterRequest;
@@ -78,6 +79,32 @@ public class AuthController {
     public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request,
             @RequestHeader(name = APP_HEADER, required = false) String app, HttpServletResponse response) {
         TokenResponse tokens = authService.login(request);
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie(app, tokens.refreshToken()).toString());
+        return ApiResponse.ok(tokens);
+    }
+
+    /**
+     * Dang nhap hoac dang ky bang Google. Neu email trung mot tai khoan mat khau da co san
+     * va chua tung gan Google, KHONG cap token o day - AuthService nem
+     * GOOGLE_LINK_CONFIRMATION_REQUIRED, FE phai hoi lai nguoi dung roi goi
+     * /google/confirm-link de thuc su lien ket.
+     */
+    @PostMapping("/google")
+    public ApiResponse<TokenResponse> loginWithGoogle(@Valid @RequestBody GoogleLoginRequest request,
+            @RequestHeader(name = APP_HEADER, required = false) String app, HttpServletResponse response) {
+        TokenResponse tokens = authService.loginWithGoogle(request);
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie(app, tokens.refreshToken()).toString());
+        return ApiResponse.ok(tokens);
+    }
+
+    /**
+     * Xac nhan gan tai khoan Google vao tai khoan mat khau da co san, chi goi sau khi nguoi
+     * dung dong y o man hoi lai (tra ve tu /google voi loi GOOGLE_LINK_CONFIRMATION_REQUIRED).
+     */
+    @PostMapping("/google/confirm-link")
+    public ApiResponse<TokenResponse> confirmGoogleLink(@Valid @RequestBody GoogleLoginRequest request,
+            @RequestHeader(name = APP_HEADER, required = false) String app, HttpServletResponse response) {
+        TokenResponse tokens = authService.confirmGoogleLink(request);
         response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie(app, tokens.refreshToken()).toString());
         return ApiResponse.ok(tokens);
     }

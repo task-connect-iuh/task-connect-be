@@ -9,7 +9,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -26,6 +28,7 @@ import vn.taskconnect.auth.api.event.EmailVerificationRequestedEvent;
 import vn.taskconnect.auth.api.event.PasswordResetRequestedEvent;
 import vn.taskconnect.auth.dto.request.ChangePasswordRequest;
 import vn.taskconnect.auth.dto.request.ForgotPasswordRequest;
+import vn.taskconnect.auth.dto.request.GoogleLoginRequest;
 import vn.taskconnect.auth.dto.request.GrantAdminRoleRequest;
 import vn.taskconnect.auth.dto.request.LoginRequest;
 import vn.taskconnect.auth.dto.request.RegisterRequest;
@@ -49,6 +52,8 @@ import vn.taskconnect.auth.repository.AuthRefreshTokenRepository;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.security.AdminProperties;
+import vn.taskconnect.security.google.GoogleProfile;
+import vn.taskconnect.security.google.GoogleTokenVerifierService;
 import vn.taskconnect.security.jwt.JwtProperties;
 import vn.taskconnect.security.jwt.JwtTokenProvider;
 import vn.taskconnect.user.api.UserFacade;
@@ -86,6 +91,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final UserFacade userFacade;
+    private final GoogleTokenVerifierService googleTokenVerifier;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
     private final Duration refreshTokenTtl;
@@ -96,8 +102,9 @@ public class AuthService {
             AuthRefreshTokenRepository refreshTokenRepository,
             AuthEmailVerificationTokenRepository verificationTokenRepository,
             AuthPasswordResetTokenRepository passwordResetTokenRepository, PasswordEncoder passwordEncoder,
-            JwtTokenProvider tokenProvider, JwtProperties jwtProperties, AdminProperties adminProperties,
-            UserFacade userFacade, ApplicationEventPublisher eventPublisher, Clock clock) {
+            JwtTokenProvider tokenProvider, GoogleTokenVerifierService googleTokenVerifier,
+            JwtProperties jwtProperties, AdminProperties adminProperties, UserFacade userFacade,
+            ApplicationEventPublisher eventPublisher, Clock clock) {
         this.accountRepository = accountRepository;
         this.accountRoleRepository = accountRoleRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -106,6 +113,7 @@ public class AuthService {
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
         this.userFacade = userFacade;
+        this.googleTokenVerifier = googleTokenVerifier;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
         this.refreshTokenTtl = Duration.ofDays(jwtProperties.refreshTokenTtlDays());
@@ -162,9 +170,110 @@ public class AuthService {
     }
 
     /**
+     * Dang nhap hoac dang ky tai khoan moi bang Google (ID token cua Google Identity
+     * Services, xem 16-api-contract.md - khong dung Authorization Code redirect flow, khong
+     * can Client Secret). Uu tien tim theo google_id (da tung dang nhap Google truoc do);
+     * khong co thi tim theo email - trung mot tai khoan mat khau cu thi KHONG tu lien ket
+     * ngam dinh, nem loi rieng de FE hoi lai nguoi dung qua man xac nhan kieu GitHub roi goi
+     * confirmGoogleLink(); khong trung ai ca thi tao tai khoan moi, vao thang ACTIVE (bo qua
+     * OTP vi Google da tu xac thuc email truoc khi phat token).
+     */
+    @Transactional(noRollbackFor = BusinessException.class)
+    public TokenResponse loginWithGoogle(GoogleLoginRequest request) {
+        GoogleProfile profile = googleTokenVerifier.verify(request.idToken());
+        if (!profile.emailVerified()) {
+            throw new BusinessException(ErrorCode.GOOGLE_EMAIL_NOT_VERIFIED);
+        }
+
+        Optional<AuthAccount> byGoogleId = accountRepository.findByGoogleId(profile.googleId());
+        if (byGoogleId.isPresent()) {
+            return signInGoogleAccount(byGoogleId.get());
+        }
+
+        String email = normalizeEmail(profile.email());
+        if (accountRepository.findByEmail(email).isPresent()) {
+            throw new BusinessException(ErrorCode.GOOGLE_LINK_CONFIRMATION_REQUIRED);
+        }
+
+        return createGoogleAccount(email, profile.googleId());
+    }
+
+    /**
+     * Xac nhan gan google_id vao mot tai khoan mat khau da co san, chi chay sau khi nguoi
+     * dung dong y o man hoi lai o FE (khac loginWithGoogle(): buoc nay CHAC CHAN lien ket,
+     * khong nem GOOGLE_LINK_CONFIRMATION_REQUIRED nua). Verify lai token tu dau thay vi tai
+     * su dung ket qua cua lan goi loginWithGoogle() truoc do - khong tin tuong gia tri cache
+     * o FE giua 2 lan goi.
+     */
+    @Transactional(noRollbackFor = BusinessException.class)
+    public TokenResponse confirmGoogleLink(GoogleLoginRequest request) {
+        GoogleProfile profile = googleTokenVerifier.verify(request.idToken());
+        if (!profile.emailVerified()) {
+            throw new BusinessException(ErrorCode.GOOGLE_EMAIL_NOT_VERIFIED);
+        }
+
+        AuthAccount account = accountRepository.findByEmail(normalizeEmail(profile.email()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        account.linkGoogleId(profile.googleId(), clock.instant());
+        accountRepository.save(account);
+
+        return signInGoogleAccount(account);
+    }
+
+    /**
+     * Kiem tra trang thai roi cap token cho mot tai khoan Google da xac dinh duoc danh
+     * tinh (da co google_id khop san, hoac vua duoc confirmGoogleLink() gan xong) - dung
+     * chung cho ca 2 truong hop, cung dieu kien chan SUSPENDED/LOCKED nhu login() thuong.
+     */
+    private TokenResponse signInGoogleAccount(AuthAccount account) {
+        Instant now = clock.instant();
+        if (account.getStatus() == AccountStatus.SUSPENDED) {
+            throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
+        }
+        if (account.isLocked(now)) {
+            throw new BusinessException(ErrorCode.ACCOUNT_LOCKED);
+        }
+
+        account.recordSuccessfulLogin(now);
+        accountRepository.save(account);
+
+        return issueTokens(account, rolesOf(account.getId()));
+    }
+
+    /**
+     * Tao tai khoan Google moi (chua tung dang nhap Google, khong trung email ai ca), gan du
+     * 2 role TASK_POSTER + TASKER giong register() (quyet dinh da chot: tai khoan tu dang ky
+     * luon mang ca 2 vai tro), roi cap token ngay - khong qua OTP.
+     */
+    private TokenResponse createGoogleAccount(String email, String googleId) {
+        Instant now = clock.instant();
+        AuthAccount account = AuthAccount.createFromGoogle(UUID.randomUUID(), email, googleId, now);
+        try {
+            accountRepository.saveAndFlush(account);
+        } catch (DataIntegrityViolationException ex) {
+            throw duplicateAccountError(ex);
+        }
+
+        for (AccountRole role : List.of(AccountRole.TASK_POSTER, AccountRole.TASKER)) {
+            accountRoleRepository.save(new AuthAccountRole(UUID.randomUUID(), account.getId(), role, now));
+        }
+
+        return issueTokens(account, rolesOf(account.getId()));
+    }
+
+    /**
      * Dang nhap chi thanh cong voi tai khoan da ACTIVE - chan UNVERIFIED (chua xac minh
      * email), LOCKED (dang trong thoi gian khoa) va SUSPENDED. Quyet dinh sua doi tu cho
      * phep UNVERIFIED dang nhap sang chan hoan toan da xac nhan voi nguoi dung.
+     *
+     * <p>Mat khau duoc kiem TRUOC khi bao EMAIL_NOT_VERIFIED (khac thu tu cu: truoc day
+     * UNVERIFIED bi chan ngay sau khi tim thay tai khoan, khong can dung mat khau) - da
+     * thong nhat voi nguoi dung: chi ai nhap dung mat khau moi duoc dua sang man xac minh
+     * OTP, tranh truong hop biet email nguoi khac (dang UNVERIFIED) la du de tu kich hoat
+     * gui lai OTP va tiep can man xac minh ma khong can biet mat khau that. He qua: sai
+     * mat khau tren tai khoan UNVERIFIED gio cung duoc tinh vao failed_login_count/khoa
+     * tai khoan giong het tai khoan ACTIVE, thay vi bo qua hoan toan nhu truoc.
      *
      * <p>{@code noRollbackFor}: nhanh sai mat khau luu failed_login_count roi nem
      * BusinessException ngay sau - mac dinh Spring se rollback ca thay doi do, khien
@@ -178,9 +287,6 @@ public class AuthService {
         Instant now = clock.instant();
         if (account.getStatus() == AccountStatus.SUSPENDED) {
             throw new BusinessException(ErrorCode.ACCOUNT_SUSPENDED);
-        }
-        if (account.getStatus() == AccountStatus.UNVERIFIED) {
-            throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
         }
         if (account.isLocked(now)) {
             throw new BusinessException(ErrorCode.ACCOUNT_LOCKED);
@@ -197,6 +303,9 @@ public class AuthService {
                 throw new BusinessException(ErrorCode.ACCOUNT_LOCKED);
             }
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+        }
+        if (account.getStatus() == AccountStatus.UNVERIFIED) {
+            throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
         }
 
         account.recordSuccessfulLogin(now);

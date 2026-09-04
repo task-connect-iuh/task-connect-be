@@ -31,7 +31,20 @@ public class AuthAccount {
     @Column(name = "phone")
     private String phone;
 
-    @Column(name = "password_hash", nullable = false, length = 72)
+    /**
+     * Dinh danh Google (claim "sub" trong ID token) - NULL neu tai khoan chua tung dang nhap
+     * qua Google. Duy nhat tren toan bang, xem uq_auth_accounts_google_id trong
+     * V11__add_google_oauth_to_auth_accounts.sql.
+     */
+    @Column(name = "google_id")
+    private String googleId;
+
+    /**
+     * Bcrypt hash. Co the NULL neu tai khoan duoc tao qua dang nhap Google va chua tung dat
+     * mat khau (xem AuthService.loginWithGoogle()) - login() bang mat khau tren tai khoan nay
+     * se luon that bai an toan vi BCryptPasswordEncoder.matches() tra ve false voi hash NULL.
+     */
+    @Column(name = "password_hash", length = 72)
     private String passwordHash;
 
     @Enumerated(EnumType.STRING)
@@ -67,6 +80,33 @@ public class AuthAccount {
         this.status = status;
         this.failedLoginCount = 0;
         this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    /**
+     * Tao tai khoan moi qua dang nhap Google lan dau (AuthService.loginWithGoogle()) - khong
+     * co mat khau (passwordHash NULL) va vao thang trang thai ACTIVE, bo qua UNVERIFIED/OTP:
+     * Google da tu xac thuc quyen so huu email nay truoc khi phat ID token, buoc xac minh
+     * email rieng cua he thong la thua.
+     */
+    public static AuthAccount createFromGoogle(UUID id, String email, String googleId, Instant now) {
+        AuthAccount account = new AuthAccount(id, email, null, null, AccountStatus.ACTIVE, now);
+        account.googleId = googleId;
+        return account;
+    }
+
+    /**
+     * Gan google_id vao mot tai khoan mat khau da co san (email trung voi tai khoan Google
+     * dang dang nhap) - chi goi sau khi nguoi dung da xac nhan qua man hoi lai kieu GitHub o
+     * FE (AuthService.confirmGoogleLink()), khong bao gio goi ngam dinh. Tai khoan dang
+     * UNVERIFIED duoc chuyen thang ACTIVE, cung ly do voi resetPassword(): email Google la
+     * bang chung xac thuc manh hon OTP thong thuong.
+     */
+    public void linkGoogleId(String googleId, Instant now) {
+        this.googleId = googleId;
+        if (status == AccountStatus.UNVERIFIED) {
+            status = AccountStatus.ACTIVE;
+        }
         this.updatedAt = now;
     }
 
@@ -136,6 +176,10 @@ public class AuthAccount {
 
     public String getPhone() {
         return phone;
+    }
+
+    public String getGoogleId() {
+        return googleId;
     }
 
     public String getPasswordHash() {
