@@ -1,11 +1,15 @@
 package vn.taskconnect.user.repository;
 
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import vn.taskconnect.user.api.CertificationStatus;
 import vn.taskconnect.user.entity.TaskerCertification;
 
@@ -31,4 +35,15 @@ public interface TaskerCertificationRepository extends JpaRepository<TaskerCerti
      * rieng nen loc thang theo status la du, giong KycVerificationRepository.findByStatus.
      */
     Page<TaskerCertification> findByStatus(CertificationStatus status, Pageable pageable);
+
+    /**
+     * Dung rieng cho requirePendingReview() trong TaskerSkillService: khoa dong ngay luc doc
+     * (SELECT ... FOR UPDATE) de chan race condition khi Admin duyet/tu choi va chinh chu tu
+     * huy dung luc gan nhu dong thoi - cung pattern voi
+     * AuthRefreshTokenRepository.findByTokenHashForUpdate() va
+     * KycVerificationRepository.findByIdForUpdate().
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from TaskerCertification c where c.id = :id")
+    Optional<TaskerCertification> findByIdForUpdate(@Param("id") UUID id);
 }

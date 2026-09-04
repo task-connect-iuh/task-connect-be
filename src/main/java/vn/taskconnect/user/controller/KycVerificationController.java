@@ -75,6 +75,19 @@ public class KycVerificationController {
     }
 
     /**
+     * Chinh chu tu huy lan nop KYC cua minh khi con dang cho duyet (VERIFYING) - khac
+     * duyet/tu choi (danh cho Admin). Xem KycVerificationService.cancel.
+     */
+    @PatchMapping("/me/kyc-verifications/{kycVerificationId}/cancel")
+    @PreAuthorize("hasRole('TASKER')")
+    public ApiResponse<KycStatusResponse> cancelMyKyc(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @PathVariable UUID kycVerificationId) {
+        KycStatusResponse response =
+                KycStatusResponse.from(kycService.cancel(principal.accountId(), kycVerificationId));
+        return ApiResponse.ok(response, "Đã huỷ hồ sơ xác minh danh tính.");
+    }
+
+    /**
      * Chi Admin: hang doi cac lan nop KYC theo status (mac dinh VERIFYING - dang cho duyet),
      * moi nhat truoc, co phan trang. Dung de biet accountId nao dang can xu ly - xem chi
      * tiet tung dong qua getLatestKycForReview(accountId) ben duoi.

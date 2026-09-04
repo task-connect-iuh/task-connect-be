@@ -88,6 +88,18 @@ public class TaskerSkillController {
     }
 
     /**
+     * Chinh chu tu huy lan nop chung chi cua minh khi con dang PENDING_REVIEW - khac
+     * duyet/tu choi (danh cho Admin). Xem TaskerSkillService.cancel.
+     */
+    @PatchMapping("/me/tasker-certifications/{certificationId}/cancel")
+    @PreAuthorize("hasRole('TASKER')")
+    public ApiResponse<TaskerSkillResponse> cancelMyCertification(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID certificationId) {
+        TaskerSkillResponse response = skillService.cancel(principal.accountId(), certificationId);
+        return ApiResponse.ok(response, "Đã huỷ hồ sơ chứng chỉ.");
+    }
+
+    /**
      * Chi Admin: hang doi cac lan nop chung chi theo status (mac dinh PENDING_REVIEW - dang
      * cho duyet), xuyen suot moi tai khoan/category, moi nhat truoc, co phan trang. Dung de
      * biet accountId+categoryId nao dang can xu ly - xem chi tiet tung dong qua

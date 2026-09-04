@@ -189,8 +189,36 @@ public class TaskerSkillService {
         return toResponse(profile, certification);
     }
 
+    /**
+     * Chinh chu tu huy lan nop chung chi cua minh khi con dang PENDING_REVIEW - khac
+     * approve/reject (do Admin xu ly). Kiem tra accountId khop truoc, nem
+     * CERTIFICATION_NOT_FOUND (khong phai loi rieng "khong phai chu") neu khong khop, tranh
+     * lo cho biet mot ban ghi voi id do co ton tai hay khong. Moi category chi co dung 1
+     * chung chi dang cho duyet tai mot thoi diem (submitSkill chan nop chong khi con PENDING),
+     * nen huy chung chi nay tuong duong huy ca chu ky nop dang cho cua category do - danh dau
+     * luon ho so ky nang sang CANCELLED, giong het cach reject() danh dau sang REJECTED.
+     */
+    @Transactional
+    public TaskerSkillResponse cancel(UUID accountId, UUID certificationId) {
+        TaskerCertification certification = requirePendingReview(certificationId);
+        if (!certification.getAccountId().equals(accountId)) {
+            throw new BusinessException(ErrorCode.CERTIFICATION_NOT_FOUND);
+        }
+        Instant now = clock.instant();
+        certification.cancel();
+        TaskerSkillProfile profile = requireSkillProfile(certification.getAccountId(), certification.getCategoryId());
+        profile.markCancelled(now);
+        return toResponse(profile, certification);
+    }
+
+    /**
+     * Tim theo id, bat buoc dang o trang thai PENDING_REVIEW moi duoc duyet/tu choi/huy.
+     * Dung findByIdForUpdate (SELECT ... FOR UPDATE) thay vi findById thuong - chan race
+     * condition khi Admin duyet/tu choi va chinh chu tu huy dung luc gan nhu dong thoi, cung
+     * ly do voi KycVerificationService.requirePendingReview.
+     */
     private TaskerCertification requirePendingReview(UUID certificationId) {
-        TaskerCertification certification = certificationRepository.findById(certificationId)
+        TaskerCertification certification = certificationRepository.findByIdForUpdate(certificationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CERTIFICATION_NOT_FOUND));
         if (certification.getStatus() != CertificationStatus.PENDING_REVIEW) {
             throw new BusinessException(ErrorCode.CERTIFICATION_NOT_PENDING_REVIEW);
@@ -209,11 +237,12 @@ public class TaskerSkillService {
     }
 
     private TaskerSkillResponse toResponse(TaskerSkillProfile profile, TaskerCertification latestCertification) {
+        UUID latestId = latestCertification != null ? latestCertification.getId() : null;
         CertificationStatus latestStatus = latestCertification != null ? latestCertification.getStatus() : null;
         String latestRejectionReason = latestCertification != null ? latestCertification.getRejectionReason() : null;
         return new TaskerSkillResponse(profile.getCategoryId(), profile.getYearsExperience(), profile.getPriceMin(),
-                profile.getPriceMax(), profile.getVerificationStatus(), profile.getVerifiedAt(), latestStatus,
-                latestRejectionReason);
+                profile.getPriceMax(), profile.getVerificationStatus(), profile.getVerifiedAt(), latestId,
+                latestStatus, latestRejectionReason);
     }
 
     private CertificationReviewResponse toReviewResponse(TaskerCertification certification) {

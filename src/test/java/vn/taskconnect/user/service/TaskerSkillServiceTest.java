@@ -253,7 +253,7 @@ class TaskerSkillServiceTest {
         TaskerCertification pending = new TaskerCertification(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID,
                 CERTIFICATE_TYPE_ID, null, null, null, null, new byte[0], null, null,
                 FIXED_NOW.minusSeconds(60));
-        when(certificationRepository.findById(pending.getId())).thenReturn(Optional.of(pending));
+        when(certificationRepository.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
         TaskerSkillProfile profile = new TaskerSkillProfile(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID, 2, null,
                 null, FIXED_NOW.minusSeconds(60));
         when(skillRepository.findByAccountIdAndCategoryId(ACCOUNT_ID, CATEGORY_ID))
@@ -272,7 +272,7 @@ class TaskerSkillServiceTest {
                 CERTIFICATE_TYPE_ID, null, null, null, null, new byte[0], null, null,
                 FIXED_NOW.minusSeconds(60));
         approved.approve(UUID.randomUUID(), FIXED_NOW.minusSeconds(30));
-        when(certificationRepository.findById(approved.getId())).thenReturn(Optional.of(approved));
+        when(certificationRepository.findByIdForUpdate(approved.getId())).thenReturn(Optional.of(approved));
 
         assertThatThrownBy(() -> service.approve(approved.getId(), UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class)
@@ -286,7 +286,7 @@ class TaskerSkillServiceTest {
         TaskerCertification pending = new TaskerCertification(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID,
                 CERTIFICATE_TYPE_ID, null, null, null, null, new byte[0], null, null,
                 FIXED_NOW.minusSeconds(60));
-        when(certificationRepository.findById(pending.getId())).thenReturn(Optional.of(pending));
+        when(certificationRepository.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
         TaskerSkillProfile profile = new TaskerSkillProfile(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID, 2, null,
                 null, FIXED_NOW.minusSeconds(60));
         when(skillRepository.findByAccountIdAndCategoryId(ACCOUNT_ID, CATEGORY_ID))
@@ -297,6 +297,50 @@ class TaskerSkillServiceTest {
 
         assertThat(response.verificationStatus()).isEqualTo(SkillVerificationStatus.REJECTED);
         assertThat(pending.getRejectionReason()).isEqualTo("Anh mo, khong doc duoc");
+    }
+
+    @Test
+    void should_cancelCertificationAndCancelSkillProfile_when_ownerCancelsPendingSubmission() {
+        TaskerCertification pending = new TaskerCertification(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID,
+                CERTIFICATE_TYPE_ID, null, null, null, null, new byte[0], null, null,
+                FIXED_NOW.minusSeconds(60));
+        when(certificationRepository.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
+        TaskerSkillProfile profile = new TaskerSkillProfile(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID, 2, null,
+                null, FIXED_NOW.minusSeconds(60));
+        when(skillRepository.findByAccountIdAndCategoryId(ACCOUNT_ID, CATEGORY_ID))
+                .thenReturn(Optional.of(profile));
+
+        TaskerSkillResponse response = service.cancel(ACCOUNT_ID, pending.getId());
+
+        assertThat(response.verificationStatus()).isEqualTo(SkillVerificationStatus.CANCELLED);
+        assertThat(pending.getStatus()).isEqualTo(CertificationStatus.CANCELLED);
+    }
+
+    @Test
+    void should_throwCertificationNotFound_when_cancelingSomeoneElsesCertification() {
+        TaskerCertification pending = new TaskerCertification(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID,
+                CERTIFICATE_TYPE_ID, null, null, null, null, new byte[0], null, null,
+                FIXED_NOW.minusSeconds(60));
+        when(certificationRepository.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
+
+        assertThatThrownBy(() -> service.cancel(UUID.randomUUID(), pending.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).errorCode())
+                .isEqualTo(ErrorCode.CERTIFICATION_NOT_FOUND);
+    }
+
+    @Test
+    void should_throwCertificationNotPendingReview_when_cancelingAlreadyReviewedCertification() {
+        TaskerCertification approved = new TaskerCertification(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID,
+                CERTIFICATE_TYPE_ID, null, null, null, null, new byte[0], null, null,
+                FIXED_NOW.minusSeconds(60));
+        approved.approve(UUID.randomUUID(), FIXED_NOW.minusSeconds(30));
+        when(certificationRepository.findByIdForUpdate(approved.getId())).thenReturn(Optional.of(approved));
+
+        assertThatThrownBy(() -> service.cancel(ACCOUNT_ID, approved.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).errorCode())
+                .isEqualTo(ErrorCode.CERTIFICATION_NOT_PENDING_REVIEW);
     }
 
     @Test

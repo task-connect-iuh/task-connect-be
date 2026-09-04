@@ -121,6 +121,14 @@ public class TaskerCertification {
         this.reviewedAt = now;
     }
 
+    /**
+     * Chinh chu tu huy lan nop cua minh - khac reject(): khong phai Admin xu ly nen khong
+     * ghi reviewedByAdminId/reviewedAt/rejectionReason.
+     */
+    public void cancel() {
+        this.status = CertificationStatus.CANCELLED;
+    }
+
     /** Id noi bo cua lan nop nay, dung de Admin duyet/tu choi dung ban ghi. */
     public UUID getId() {
         return id;

@@ -160,7 +160,7 @@ class KycVerificationServiceTest {
         UUID adminId = UUID.randomUUID();
         KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
                 new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
-        when(kycRepository.findById(pending.getId())).thenReturn(Optional.of(pending));
+        when(kycRepository.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
         UserProfile profile = new UserProfile(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", "Quan 7", FIXED_NOW);
         when(profileRepository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(profile));
         when(profileRepository.save(any(UserProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -177,7 +177,7 @@ class KycVerificationServiceTest {
         KycVerification alreadyVerified = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
                 new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
         alreadyVerified.approve(UUID.randomUUID(), FIXED_NOW.minusSeconds(30));
-        when(kycRepository.findById(alreadyVerified.getId())).thenReturn(Optional.of(alreadyVerified));
+        when(kycRepository.findByIdForUpdate(alreadyVerified.getId())).thenReturn(Optional.of(alreadyVerified));
 
         assertThatThrownBy(() -> service.approve(alreadyVerified.getId(), UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class)
@@ -190,13 +190,53 @@ class KycVerificationServiceTest {
         UUID adminId = UUID.randomUUID();
         KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
                 new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
-        when(kycRepository.findById(pending.getId())).thenReturn(Optional.of(pending));
+        when(kycRepository.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
         when(profileRepository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
 
         KycVerification result = service.reject(pending.getId(), adminId, new RejectKycRequest("Anh mo"));
 
         assertThat(result.getStatus()).isEqualTo(KycStatus.REJECTED);
         assertThat(result.getRejectionReason()).isEqualTo("Anh mo");
+    }
+
+    @Test
+    void should_cancelAndSyncProfile_when_ownerCancelsPendingSubmission() {
+        KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+                new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
+        when(kycRepository.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
+        UserProfile profile = new UserProfile(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", "Quan 7", FIXED_NOW);
+        when(profileRepository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(profile));
+        when(profileRepository.save(any(UserProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        KycVerification result = service.cancel(ACCOUNT_ID, pending.getId());
+
+        assertThat(result.getStatus()).isEqualTo(KycStatus.CANCELLED);
+        assertThat(profile.getKycStatus()).isEqualTo(KycStatus.CANCELLED);
+    }
+
+    @Test
+    void should_throwKycNotFound_when_cancelingSomeoneElsesSubmission() {
+        KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+                new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
+        when(kycRepository.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
+
+        assertThatThrownBy(() -> service.cancel(UUID.randomUUID(), pending.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).errorCode())
+                .isEqualTo(ErrorCode.KYC_NOT_FOUND);
+    }
+
+    @Test
+    void should_throwKycNotPendingReview_when_cancelingAlreadyReviewedSubmission() {
+        KycVerification approved = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+                new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
+        approved.approve(UUID.randomUUID(), FIXED_NOW.minusSeconds(30));
+        when(kycRepository.findByIdForUpdate(approved.getId())).thenReturn(Optional.of(approved));
+
+        assertThatThrownBy(() -> service.cancel(ACCOUNT_ID, approved.getId()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).errorCode())
+                .isEqualTo(ErrorCode.KYC_NOT_PENDING_REVIEW);
     }
 
     @Test

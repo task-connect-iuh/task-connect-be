@@ -104,6 +104,15 @@ public class TaskerSkillProfile {
         this.updatedAt = now;
     }
 
+    /**
+     * Chuyen CANCELLED khi chinh chu tu huy chung chi dang cho duyet cua category nay - khac
+     * markRejected(): la tu chinh chu rut lai, khong phai Admin tu choi.
+     */
+    public void markCancelled(Instant now) {
+        this.verificationStatus = SkillVerificationStatus.CANCELLED;
+        this.updatedAt = now;
+    }
+
     /** Id noi bo cua ho so ky nang nay. */
     public UUID getId() {
         return id;

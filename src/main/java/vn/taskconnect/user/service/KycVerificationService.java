@@ -157,9 +157,33 @@ public class KycVerificationService {
         return verification;
     }
 
-    /** Tim lan nop theo id, bat buoc dang o trang thai VERIFYING moi duoc duyet/tu choi. */
+    /**
+     * Chinh chu tu huy lan nop cua minh khi con dang VERIFYING - khac approve/reject (do
+     * Admin xu ly). Kiem tra accountId khop truoc, nem KYC_NOT_FOUND (khong phai loi rieng
+     * "khong phai chu") neu khong khop, tranh lo cho biet mot ban ghi voi id do co ton tai
+     * hay khong. Dung chung requirePendingReview() (co khoa PESSIMISTIC_WRITE) voi
+     * approve/reject nen neu Admin duyet/tu choi dung luc gan nhu dong thoi, dung 1 ben
+     * thang, ben con lai nhan KYC_NOT_PENDING_REVIEW ro rang thay vi am tham de lech du lieu.
+     */
+    @Transactional
+    public KycVerification cancel(UUID accountId, UUID kycVerificationId) {
+        KycVerification verification = requirePendingReview(kycVerificationId);
+        if (!verification.getAccountId().equals(accountId)) {
+            throw new BusinessException(ErrorCode.KYC_NOT_FOUND);
+        }
+        verification.cancel();
+        syncProfileKycStatus(accountId, KycStatus.CANCELLED, clock.instant());
+        return verification;
+    }
+
+    /**
+     * Tim lan nop theo id, bat buoc dang o trang thai VERIFYING moi duoc duyet/tu choi/huy.
+     * Dung findByIdForUpdate (SELECT ... FOR UPDATE) thay vi findById thuong - chan race
+     * condition khi Admin duyet/tu choi va chinh chu tu huy dung luc gan nhu dong thoi, cung
+     * ly do voi AuthRefreshTokenRepository.findByTokenHashForUpdate.
+     */
     private KycVerification requirePendingReview(UUID kycVerificationId) {
-        KycVerification verification = kycRepository.findById(kycVerificationId)
+        KycVerification verification = kycRepository.findByIdForUpdate(kycVerificationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.KYC_NOT_FOUND));
         if (verification.getStatus() != KycStatus.VERIFYING) {
             throw new BusinessException(ErrorCode.KYC_NOT_PENDING_REVIEW);
