@@ -3,6 +3,7 @@ package vn.taskconnect.auth.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -25,6 +26,7 @@ import vn.taskconnect.auth.entity.AuthAccount;
 import vn.taskconnect.auth.entity.AuthAccountRole;
 import vn.taskconnect.auth.repository.AuthAccountRepository;
 import vn.taskconnect.auth.repository.AuthAccountRoleRepository;
+import vn.taskconnect.auth.repository.AuthEmailChangeTokenRepository;
 import vn.taskconnect.auth.repository.AuthEmailVerificationTokenRepository;
 import vn.taskconnect.auth.repository.AuthPasswordResetTokenRepository;
 import vn.taskconnect.auth.repository.AuthRefreshTokenRepository;
@@ -49,11 +51,13 @@ class AuthServiceGoogleLoginTest {
     private static final String ID_TOKEN = "fake-id-token";
     private static final String GOOGLE_ID = "google-sub-123";
     private static final String EMAIL = "khanh@example.com";
+    private static final String NAME = "Nguyen Van Khanh";
 
     private final AuthAccountRepository accountRepository = mock(AuthAccountRepository.class);
     private final AuthAccountRoleRepository accountRoleRepository = mock(AuthAccountRoleRepository.class);
     private final GoogleTokenVerifierService googleTokenVerifier = mock(GoogleTokenVerifierService.class);
     private final JwtTokenProvider tokenProvider = mock(JwtTokenProvider.class);
+    private final UserFacade userFacade = mock(UserFacade.class);
     private final Clock clock = Clock.fixed(FIXED_NOW, ZoneOffset.UTC);
 
     private final AuthService service = new AuthService(
@@ -62,12 +66,13 @@ class AuthServiceGoogleLoginTest {
             mock(AuthRefreshTokenRepository.class),
             mock(AuthEmailVerificationTokenRepository.class),
             mock(AuthPasswordResetTokenRepository.class),
+            mock(AuthEmailChangeTokenRepository.class),
             mock(PasswordEncoder.class),
             tokenProvider,
             googleTokenVerifier,
             new JwtProperties("test-secret", 15, 15, false),
             new AdminProperties(SUPER_ADMIN_EMAIL),
-            mock(UserFacade.class),
+            userFacade,
             mock(ApplicationEventPublisher.class),
             clock);
 
@@ -76,7 +81,7 @@ class AuthServiceGoogleLoginTest {
     }
 
     private GoogleProfile verifiedProfile() {
-        return new GoogleProfile(GOOGLE_ID, EMAIL, true);
+        return new GoogleProfile(GOOGLE_ID, EMAIL, true, NAME);
     }
 
     // loginWithGoogle - chua ai tung dang nhap Google hay dang ky email nay, tao tai khoan moi.
@@ -98,6 +103,20 @@ class AuthServiceGoogleLoginTest {
         verify(accountRoleRepository, times(1)).save(argThatRole(AccountRole.TASK_POSTER, created.getId()));
         verify(accountRoleRepository, times(1)).save(argThatRole(AccountRole.TASKER, created.getId()));
         verify(tokenProvider, times(1)).generateAccessToken(any(), any());
+        verify(userFacade, times(1)).createInitialProfile(any(), eq(NAME));
+    }
+
+    // loginWithGoogle - tao tai khoan moi nhung claim "name" null/rong (token phat voi scope
+    // thu hep) - fallback dung email lam fullName tam, khac han bao loi hay bo trong.
+    @Test
+    void should_useEmailAsFallbackFullName_when_googleNameClaimIsBlank() {
+        when(googleTokenVerifier.verify(ID_TOKEN)).thenReturn(new GoogleProfile(GOOGLE_ID, EMAIL, true, "  "));
+        when(accountRepository.findByGoogleId(GOOGLE_ID)).thenReturn(Optional.empty());
+        when(accountRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+
+        service.loginWithGoogle(request());
+
+        verify(userFacade, times(1)).createInitialProfile(any(), eq(EMAIL));
     }
 
     // loginWithGoogle - google_id da khop san, day la lan dang nhap lai.
@@ -137,7 +156,7 @@ class AuthServiceGoogleLoginTest {
     // loginWithGoogle - email Google chua duoc Google xac thuc.
     @Test
     void should_throwGoogleEmailNotVerified_when_profileEmailNotVerified() {
-        when(googleTokenVerifier.verify(ID_TOKEN)).thenReturn(new GoogleProfile(GOOGLE_ID, EMAIL, false));
+        when(googleTokenVerifier.verify(ID_TOKEN)).thenReturn(new GoogleProfile(GOOGLE_ID, EMAIL, false, NAME));
 
         assertThatThrownBy(() -> service.loginWithGoogle(request()))
                 .isInstanceOf(BusinessException.class)

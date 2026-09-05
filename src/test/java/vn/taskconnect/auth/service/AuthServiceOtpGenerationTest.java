@@ -11,6 +11,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import vn.taskconnect.auth.repository.AuthAccountRepository;
 import vn.taskconnect.auth.repository.AuthAccountRoleRepository;
+import vn.taskconnect.auth.repository.AuthEmailChangeTokenRepository;
 import vn.taskconnect.auth.repository.AuthEmailVerificationTokenRepository;
 import vn.taskconnect.auth.repository.AuthPasswordResetTokenRepository;
 import vn.taskconnect.auth.repository.AuthRefreshTokenRepository;
@@ -34,6 +35,7 @@ class AuthServiceOtpGenerationTest {
                 mock(AuthRefreshTokenRepository.class),
                 mock(AuthEmailVerificationTokenRepository.class),
                 mock(AuthPasswordResetTokenRepository.class),
+                mock(AuthEmailChangeTokenRepository.class),
                 mock(PasswordEncoder.class),
                 mock(JwtTokenProvider.class),
                 mock(GoogleTokenVerifierService.class),

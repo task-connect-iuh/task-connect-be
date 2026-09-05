@@ -55,6 +55,9 @@ public class GoogleTokenVerifierService {
 
         GoogleIdToken.Payload payload = token.getPayload();
         Boolean emailVerified = payload.getEmailVerified();
-        return new GoogleProfile(payload.getSubject(), payload.getEmail(), Boolean.TRUE.equals(emailVerified));
+        // "name" khong co typed getter rieng nhu getSubject()/getEmail() - Payload la GenericJson
+        // (Map<String,Object>), doc truc tiep qua get() giong cach getEmailVerified() noi bo doc "email_verified".
+        String name = (String) payload.get("name");
+        return new GoogleProfile(payload.getSubject(), payload.getEmail(), Boolean.TRUE.equals(emailVerified), name);
     }
 }

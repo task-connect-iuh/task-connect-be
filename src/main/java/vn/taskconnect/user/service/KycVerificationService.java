@@ -1,11 +1,15 @@
 package vn.taskconnect.user.service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -19,8 +23,10 @@ import vn.taskconnect.user.dto.request.RejectKycRequest;
 import vn.taskconnect.user.dto.request.SubmitKycRequest;
 import vn.taskconnect.user.dto.response.KycReviewDetailResponse;
 import vn.taskconnect.user.dto.response.KycReviewSummaryResponse;
+import vn.taskconnect.user.entity.KycIdNumberLock;
 import vn.taskconnect.user.entity.KycVerification;
 import vn.taskconnect.user.entity.UserProfile;
+import vn.taskconnect.user.repository.KycIdNumberLockRepository;
 import vn.taskconnect.user.repository.KycVerificationRepository;
 import vn.taskconnect.user.repository.UserProfileRepository;
 
@@ -36,14 +42,17 @@ public class KycVerificationService {
     private static final Duration VIEW_URL_TTL = Duration.ofMinutes(10);
 
     private final KycVerificationRepository kycRepository;
+    private final KycIdNumberLockRepository idNumberLockRepository;
     private final UserProfileRepository profileRepository;
     private final AesEncryptionService encryptionService;
     private final S3PresignedUploadService s3Service;
     private final Clock clock;
 
-    public KycVerificationService(KycVerificationRepository kycRepository, UserProfileRepository profileRepository,
+    public KycVerificationService(KycVerificationRepository kycRepository,
+            KycIdNumberLockRepository idNumberLockRepository, UserProfileRepository profileRepository,
             AesEncryptionService encryptionService, S3PresignedUploadService s3Service, Clock clock) {
         this.kycRepository = kycRepository;
+        this.idNumberLockRepository = idNumberLockRepository;
         this.profileRepository = profileRepository;
         this.encryptionService = encryptionService;
         this.s3Service = s3Service;
@@ -55,6 +64,10 @@ public class KycVerificationService {
      * nop chong len) hoac da VERIFIED (khong can nop lai); cho phep nop lai khi lan gan nhat
      * la REJECTED hoac chua tung nop lan nao - khong co UNIQUE tren account_id trong V2
      * migration, moi lan nop la mot dong rieng, dung nguyen mau audit trail.
+     *
+     * <p>Chan them neu so CCCD nay dang duoc mot tai khoan KHAC "chiem" (con VERIFYING hoac
+     * da VERIFIED) - xem claimIdNumber()/user_kyc_id_number_locks. Tai khoan chinh chu van
+     * nop lai duoc CCCD cua minh (vd sau khi bi tu choi anh mo).
      */
     @Transactional
     public KycVerification submitKyc(UUID accountId, SubmitKycRequest request) {
@@ -69,18 +82,65 @@ public class KycVerificationService {
         requireOwnKycPrefix(accountId, request.idCardFrontKey());
         requireOwnKycPrefix(accountId, request.idCardBackKey());
 
+        byte[] idNumberHash = hashIdNumber(request.idNumber());
+        idNumberLockRepository.findById(idNumberHash).ifPresent(lock -> {
+            if (!lock.getAccountId().equals(accountId)) {
+                throw new BusinessException(ErrorCode.KYC_ID_NUMBER_ALREADY_USED);
+            }
+        });
+
         Instant now = clock.instant();
         KycVerification verification = new KycVerification(
                 UUID.randomUUID(),
                 accountId,
                 request.fullNameOnId(),
                 encryptionService.encrypt(request.idNumber()),
+                idNumberHash,
                 encryptionService.encrypt(request.idCardFrontKey()),
                 encryptionService.encrypt(request.idCardBackKey()),
                 now);
         KycVerification saved = kycRepository.save(verification);
+        claimIdNumber(idNumberHash, accountId, saved.getId(), now);
         syncProfileKycStatus(accountId, KycStatus.VERIFYING, now);
         return saved;
+    }
+
+    /**
+     * Chiem id_number_hash cho lan nop nay. PRIMARY KEY tren id_number_hash la lop chan cuoi
+     * cung o muc DB: neu 2 tai khoan khac nhau nop cung mot CCCD gan nhu dong thoi, request
+     * check-then-insert o submitKyc() co the khong bat duoc (TOCTOU) nhung insert thu hai se
+     * vi pham PK va bi bat o day, convert thanh loi nghiep vu ro rang - cung idiom voi
+     * AuthService.duplicateAccountError().
+     */
+    private void claimIdNumber(byte[] idNumberHash, UUID accountId, UUID kycVerificationId, Instant now) {
+        KycIdNumberLock lock = idNumberLockRepository.findById(idNumberHash)
+                .orElseGet(() -> new KycIdNumberLock(idNumberHash, accountId, kycVerificationId, now));
+        lock.reclaim(kycVerificationId, now);
+        try {
+            idNumberLockRepository.saveAndFlush(lock);
+        } catch (DataIntegrityViolationException ex) {
+            throw new BusinessException(ErrorCode.KYC_ID_NUMBER_ALREADY_USED);
+        }
+    }
+
+    /**
+     * Giai phong id_number_hash sau khi mot lan nop bi tu choi/huy - CCCD do khong con bi
+     * "chiem" nua, cho phep nop lai (chinh chu hoac nguoi khac). Chi xoa neu lock hien tai
+     * dung la cua lan nop nay (kycVerificationId khop) - tranh xoa nham lock da duoc mot lan
+     * nop moi hon cua cung tai khoan tiep quan.
+     */
+    private void releaseIdNumber(KycVerification verification) {
+        idNumberLockRepository.deleteByIdNumberHashAndKycVerificationId(
+                verification.getIdNumberHash(), verification.getId());
+    }
+
+    /** SHA-256 (deterministic) cua so CCCD - dung de tra cuu/doi chieu, khong dung de giai ma nguoc. */
+    private byte[] hashIdNumber(String idNumber) {
+        try {
+            return MessageDigest.getInstance("SHA-256").digest(idNumber.getBytes(StandardCharsets.UTF_8));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 khong kha dung", ex);
+        }
     }
 
     /** Doc lan nop gan nhat cua chinh chu tai khoan. Nem USR-404-KYC_NOT_FOUND neu chua tung nop. */
@@ -153,6 +213,7 @@ public class KycVerificationService {
         KycVerification verification = requirePendingReview(kycVerificationId);
         Instant now = clock.instant();
         verification.reject(adminAccountId, request.rejectionReason(), now);
+        releaseIdNumber(verification);
         syncProfileKycStatus(verification.getAccountId(), KycStatus.REJECTED, now);
         return verification;
     }
@@ -172,6 +233,7 @@ public class KycVerificationService {
             throw new BusinessException(ErrorCode.KYC_NOT_FOUND);
         }
         verification.cancel();
+        releaseIdNumber(verification);
         syncProfileKycStatus(accountId, KycStatus.CANCELLED, clock.instant());
         return verification;
     }

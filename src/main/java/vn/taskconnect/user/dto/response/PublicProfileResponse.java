@@ -2,6 +2,7 @@ package vn.taskconnect.user.dto.response;
 
 import java.util.List;
 import java.util.UUID;
+import vn.taskconnect.auth.api.dto.AccountSummary;
 import vn.taskconnect.user.entity.UserProfile;
 
 /**
@@ -13,7 +14,9 @@ import vn.taskconnect.user.entity.UserProfile;
  * khong lo ho so PENDING/REJECTED, khong lo kinh nghiem/gia/chung chi. availability lo lich
  * ranh trong tuan (thu + khung gio) de Poster xem truoc Tasker ranh luc nao - khong nhay
  * cam, chi la thong tin tu khai khong qua duyet, giong het du lieu Tasker tu xem o
- * GET /users/me/tasker-availability.
+ * GET /users/me/tasker-availability. email/phone doc tu AuthAccount qua AuthFacade - lo ra
+ * theo yeu cau nghiep vu (nguoi xem ho so can lien he truc tiep), null neu tai khoan khong
+ * co (vd phone chua khai bao).
  */
 public record PublicProfileResponse(
         UUID accountId,
@@ -22,12 +25,14 @@ public record PublicProfileResponse(
         String bio,
         String operatingArea,
         List<PublicVerifiedSkillResponse> verifiedSkills,
-        List<AvailabilitySlotResponse> availability
+        List<AvailabilitySlotResponse> availability,
+        String email,
+        String phone
 ) {
 
     /** Chuyen entity sang DTO cong khai, chi lay cac truong khong nhay cam, kem danh sach ky nang da xac minh va lich ranh do service lap rap san. */
     public static PublicProfileResponse from(UserProfile profile, List<PublicVerifiedSkillResponse> verifiedSkills,
-            List<AvailabilitySlotResponse> availability) {
+            List<AvailabilitySlotResponse> availability, AccountSummary account) {
         return new PublicProfileResponse(
                 profile.getAccountId(),
                 profile.getFullName(),
@@ -35,6 +40,8 @@ public record PublicProfileResponse(
                 profile.getBio(),
                 profile.getOperatingArea(),
                 verifiedSkills,
-                availability);
+                availability,
+                account != null ? account.email() : null,
+                account != null ? account.phone() : null);
     }
 }

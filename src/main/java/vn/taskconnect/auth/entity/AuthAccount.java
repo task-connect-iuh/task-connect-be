@@ -166,6 +166,26 @@ public class AuthAccount {
         this.updatedAt = now;
     }
 
+    /**
+     * Doi email sau khi da xac minh quyen so huu ca email cu lan email moi qua OTP (xem
+     * AuthService.confirmEmailChange()) - UNIQUE KEY tren cot email (V1__create_auth_tables.sql)
+     * la lop chan cuoi cung chong race condition, giong updatePhone().
+     */
+    public void changeEmail(String email, Instant now) {
+        this.email = email;
+        this.updatedAt = now;
+    }
+
+    /**
+     * Doi so dien thoai sau khi da dang ky - AuthService.updatePhone() da kiem tra trung
+     * truoc khi goi ham nay (existsByPhoneAndIdNot), UNIQUE KEY tren cot phone (xem
+     * V1__create_auth_tables.sql) la lop chan cuoi cung chong race condition.
+     */
+    public void updatePhone(String phone, Instant now) {
+        this.phone = phone;
+        this.updatedAt = now;
+    }
+
     public UUID getId() {
         return id;
     }

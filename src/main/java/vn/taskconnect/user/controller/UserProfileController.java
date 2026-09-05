@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import vn.taskconnect.auth.api.AuthFacade;
 import vn.taskconnect.common.response.ApiResponse;
 import vn.taskconnect.security.jwt.AuthenticatedPrincipal;
 import vn.taskconnect.user.dto.request.AvatarUploadUrlRequest;
@@ -32,17 +33,22 @@ public class UserProfileController {
 
     private final UserProfileService profileService;
     private final AvatarUploadService avatarUploadService;
+    private final AuthFacade authFacade;
 
-    public UserProfileController(UserProfileService profileService, AvatarUploadService avatarUploadService) {
+    public UserProfileController(UserProfileService profileService, AvatarUploadService avatarUploadService,
+            AuthFacade authFacade) {
         this.profileService = profileService;
         this.avatarUploadService = avatarUploadService;
+        this.authFacade = authFacade;
     }
 
     /** Xem ho so cua chinh minh. Moi tai khoan da dang nhap deu duoc xem ho so cua chinh no. */
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
     public ApiResponse<ProfileResponse> getMyProfile(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
-        return ApiResponse.ok(ProfileResponse.from(profileService.getMyProfile(principal.accountId())));
+        ProfileResponse response = ProfileResponse.from(profileService.getMyProfile(principal.accountId()),
+                authFacade.findAccount(principal.accountId()).orElse(null));
+        return ApiResponse.ok(response);
     }
 
     /**
@@ -53,7 +59,8 @@ public class UserProfileController {
     @PreAuthorize("isAuthenticated()")
     public ApiResponse<ProfileResponse> updateMyProfile(@AuthenticationPrincipal AuthenticatedPrincipal principal,
             @Valid @RequestBody UpdateProfileRequest request) {
-        ProfileResponse response = ProfileResponse.from(profileService.upsertProfile(principal.accountId(), request));
+        ProfileResponse response = ProfileResponse.from(profileService.upsertProfile(principal.accountId(), request),
+                authFacade.findAccount(principal.accountId()).orElse(null));
         return ApiResponse.ok(response, "Cập nhật hồ sơ thành công.");
     }
 

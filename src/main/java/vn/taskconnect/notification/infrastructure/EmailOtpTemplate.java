@@ -36,4 +36,49 @@ public class EmailOtpTemplate {
                 + "Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.\n\n"
                 + "TaskConnect";
     }
+
+    public String emailChangeOldOtpSubject() {
+        return "Mã xác minh email hiện tại của bạn";
+    }
+
+    public String emailChangeOldOtpBody(String otp, Duration validFor) {
+        long minutes = validFor.toMinutes();
+        return "Bạn vừa yêu cầu đổi email cho tài khoản TaskConnect. Mã xác minh email hiện tại "
+                + "của bạn là: " + otp + "\n\n"
+                + "Mã có hiệu lực trong " + minutes + " phút. Nếu bạn không yêu cầu đổi email, "
+                + "hãy bỏ qua email này.\n\n"
+                + "TaskConnect";
+    }
+
+    public String emailChangeNewOtpSubject() {
+        return "Mã xác minh email mới của bạn";
+    }
+
+    public String emailChangeNewOtpBody(String otp, Duration validFor) {
+        long minutes = validFor.toMinutes();
+        return "Mã xác minh cho email mới của bạn là: " + otp + "\n\n"
+                + "Mã có hiệu lực trong " + minutes + " phút. Nếu bạn không yêu cầu đổi email, "
+                + "hãy bỏ qua email này.\n\n"
+                + "TaskConnect";
+    }
+
+    public String emailChangedOldNoticeSubject() {
+        return "Email tài khoản TaskConnect của bạn đã được thay đổi";
+    }
+
+    public String emailChangedOldNoticeBody(String maskedNewEmail) {
+        return "Bạn đã thay đổi email của mình sang " + maskedNewEmail + ".\n\n"
+                + "Nếu không phải bạn thực hiện thay đổi này, hãy liên hệ hỗ trợ ngay.\n\n"
+                + "TaskConnect";
+    }
+
+    public String emailChangedWelcomeSubject() {
+        return "Đổi email thành công";
+    }
+
+    public String emailChangedWelcomeBody() {
+        return "Chúc mừng bạn đã đổi email thành công. Từ nay bạn đăng nhập TaskConnect bằng "
+                + "địa chỉ email này.\n\n"
+                + "TaskConnect";
+    }
 }

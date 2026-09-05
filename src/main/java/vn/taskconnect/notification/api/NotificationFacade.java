@@ -1,5 +1,6 @@
 package vn.taskconnect.notification.api;
 
+import vn.taskconnect.notification.api.dto.EmailChangedNotice;
 import vn.taskconnect.notification.api.dto.EmailOtpMessage;
 
 /**
@@ -25,4 +26,23 @@ public interface NotificationFacade {
      * nhu {@link #sendEmailVerificationOtp(EmailOtpMessage)} - xem Javadoc do de biet ly do.
      */
     void sendPasswordResetOtp(EmailOtpMessage message);
+
+    /**
+     * Gui ma OTP xac minh quyen so huu email HIEN TAI - buoc 1 cua luong doi email. Cung
+     * dieu kien goi va cam ket khong nem exception nhu sendEmailVerificationOtp.
+     */
+    void sendEmailChangeOldOtp(EmailOtpMessage message);
+
+    /**
+     * Gui ma OTP xac minh quyen so huu email MOI - buoc 2 cua luong doi email. Cung dieu
+     * kien goi va cam ket khong nem exception nhu sendEmailVerificationOtp.
+     */
+    void sendEmailChangeNewOtp(EmailOtpMessage message);
+
+    /**
+     * Gui 2 thong bao sau khi doi email thanh cong: email cu nhan tin bao da doi (kem email
+     * moi rut gon), email moi nhan tin chuc mung. Khong nem exception - loi gui mail nao
+     * cung chi duoc log, khong lam gian doan luong con lai.
+     */
+    void sendEmailChangedNotices(EmailChangedNotice notice);
 }

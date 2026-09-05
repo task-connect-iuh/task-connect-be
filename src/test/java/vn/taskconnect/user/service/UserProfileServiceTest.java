@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
+import vn.taskconnect.auth.api.AuthFacade;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.user.dto.request.UpdateProfileRequest;
@@ -42,9 +43,10 @@ class UserProfileServiceTest {
     private final TaskerSkillProfileRepository skillRepository = mock(TaskerSkillProfileRepository.class);
     private final ServiceCategoryRepository categoryRepository = mock(ServiceCategoryRepository.class);
     private final TaskerAvailabilityRepository availabilityRepository = mock(TaskerAvailabilityRepository.class);
+    private final AuthFacade authFacade = mock(AuthFacade.class);
     private final Clock clock = Clock.fixed(FIXED_NOW, ZoneOffset.UTC);
-    private final UserProfileService service =
-            new UserProfileService(repository, skillRepository, categoryRepository, availabilityRepository, clock);
+    private final UserProfileService service = new UserProfileService(
+            repository, skillRepository, categoryRepository, availabilityRepository, authFacade, clock);
 
     private static UpdateProfileRequest requestOf(String fullName, String avatarUrl, String addressText, String bio,
             String operatingArea, BigDecimal lat, BigDecimal lng) {
