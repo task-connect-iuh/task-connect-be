@@ -21,6 +21,9 @@ public interface AuthAccountRepository extends JpaRepository<AuthAccount, UUID> 
 
     boolean existsByPhone(String phone);
 
+    /** Kiem tra trung so dien thoai voi mot tai khoan KHAC accountId - dung khi doi phone (loai tru chinh minh). */
+    boolean existsByPhoneAndIdNot(String phone, UUID id);
+
     /**
      * Xoa hang loat tai khoan qua han theo status va moc tao (bulk JPQL DELETE, khong
      * load tung entity qua vong doi Hibernate) - dung cho AuthAccountCleanupService don

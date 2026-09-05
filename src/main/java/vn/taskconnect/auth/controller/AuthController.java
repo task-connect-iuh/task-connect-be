@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -23,9 +24,12 @@ import vn.taskconnect.auth.dto.request.GoogleLoginRequest;
 import vn.taskconnect.auth.dto.request.GrantAdminRoleRequest;
 import vn.taskconnect.auth.dto.request.LoginRequest;
 import vn.taskconnect.auth.dto.request.RegisterRequest;
+import vn.taskconnect.auth.dto.request.RequestNewEmailRequest;
 import vn.taskconnect.auth.dto.request.ResendVerificationRequest;
 import vn.taskconnect.auth.dto.request.ResetPasswordRequest;
 import vn.taskconnect.auth.dto.request.RevokeAdminRoleRequest;
+import vn.taskconnect.auth.dto.request.UpdatePhoneRequest;
+import vn.taskconnect.auth.dto.request.VerifyEmailChangeOtpRequest;
 import vn.taskconnect.auth.dto.request.VerifyEmailRequest;
 import vn.taskconnect.auth.dto.response.ForgotPasswordResponse;
 import vn.taskconnect.auth.dto.response.ResendVerificationResponse;
@@ -220,6 +224,59 @@ public class AuthController {
         authService.changePassword(principal.accountId(), request);
         response.addHeader(HttpHeaders.SET_COOKIE, clearRefreshCookie(app).toString());
         return ApiResponse.ok(null, "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.");
+    }
+
+    /**
+     * Doi so dien thoai cua chinh minh - loi AUTH-409-PHONE_EXISTS neu da co tai khoan khac
+     * dung so nay. Khac change-password: khong thu hoi phien, khong can dang nhap lai.
+     */
+    @PatchMapping("/me/phone")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<Void> updatePhone(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @Valid @RequestBody UpdatePhoneRequest request) {
+        authService.updatePhone(principal.accountId(), request);
+        return ApiResponse.ok(null, "Cập nhật số điện thoại thành công.");
+    }
+
+    /**
+     * Buoc 1 doi email: gui OTP toi email hien tai. FE goi khi vua mo modal "Doi email".
+     */
+    @PostMapping("/me/email-change/request")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<Void> requestEmailChange(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
+        authService.requestEmailChange(principal.accountId());
+        return ApiResponse.ok(null, "Đã gửi mã xác minh đến email hiện tại của bạn.");
+    }
+
+    /** Buoc 2 doi email: xac minh OTP da gui toi email hien tai. */
+    @PostMapping("/me/email-change/verify-old")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<Void> verifyOldEmailForChange(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @Valid @RequestBody VerifyEmailChangeOtpRequest request) {
+        authService.verifyOldEmailForChange(principal.accountId(), request);
+        return ApiResponse.ok(null, "Xác minh email hiện tại thành công.");
+    }
+
+    /** Buoc 3 doi email: nhan email moi, gui OTP rieng toi dia chi do. */
+    @PostMapping("/me/email-change/new-email")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<Void> requestNewEmailForChange(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @Valid @RequestBody RequestNewEmailRequest request) {
+        authService.requestNewEmailForChange(principal.accountId(), request);
+        return ApiResponse.ok(null, "Đã gửi mã xác minh đến email mới của bạn.");
+    }
+
+    /**
+     * Buoc 4 (cuoi) doi email: xac minh OTP email moi - thanh cong thi doi email that su.
+     * Khong thu hoi phien/cookie: access token hien tai van con hieu luc (accountId khong
+     * doi), khac han change-password/resetPassword.
+     */
+    @PostMapping("/me/email-change/confirm")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<Void> confirmEmailChange(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @Valid @RequestBody VerifyEmailChangeOtpRequest request) {
+        authService.confirmEmailChange(principal.accountId(), request);
+        return ApiResponse.ok(null, "Đổi email thành công.");
     }
 
     /**

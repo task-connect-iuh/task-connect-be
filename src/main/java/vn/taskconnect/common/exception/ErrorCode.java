@@ -82,6 +82,18 @@ public enum ErrorCode {
             "Email Google của bạn chưa được xác thực. Vui lòng xác thực email với Google trước."),
     GOOGLE_LINK_CONFIRMATION_REQUIRED("AUTH-409-GOOGLE_LINK_CONFIRMATION_REQUIRED", HttpStatus.CONFLICT,
             "Email này đã có tài khoản. Bạn có muốn bật đăng nhập bằng Google cho tài khoản này không?"),
+    EMAIL_CHANGE_NOT_REQUESTED("AUTH-404-EMAIL_CHANGE_NOT_REQUESTED", HttpStatus.NOT_FOUND,
+            "Bạn chưa yêu cầu đổi email hoặc yêu cầu đã hết hạn. Vui lòng bắt đầu lại."),
+    OLD_EMAIL_NOT_VERIFIED("AUTH-409-OLD_EMAIL_NOT_VERIFIED", HttpStatus.CONFLICT,
+            "Bạn cần xác minh email hiện tại trước khi nhập email mới."),
+    NEW_EMAIL_SAME_AS_CURRENT("AUTH-400-NEW_EMAIL_SAME_AS_CURRENT", HttpStatus.BAD_REQUEST,
+            "Email mới phải khác email hiện tại."),
+    INVALID_EMAIL_CHANGE_OTP("AUTH-400-INVALID_EMAIL_CHANGE_OTP", HttpStatus.BAD_REQUEST,
+            "Mã xác minh không đúng. Bạn có thể nhập lại hoặc yêu cầu mã mới."),
+    EXPIRED_EMAIL_CHANGE_OTP("AUTH-410-EXPIRED_EMAIL_CHANGE_OTP", HttpStatus.GONE,
+            "Mã xác minh đã hết hạn. Bạn có thể yêu cầu mã mới."),
+    TOO_MANY_EMAIL_CHANGE_OTP_ATTEMPTS("AUTH-429-TOO_MANY_EMAIL_CHANGE_OTP_ATTEMPTS", HttpStatus.TOO_MANY_REQUESTS,
+            "Bạn đã nhập sai mã quá nhiều lần. Vui lòng bắt đầu lại từ đầu."),
 
     // --- USR ---
     MISSING_OPERATING_AREA("USR-400-MISSING_OPERATING_AREA", HttpStatus.BAD_REQUEST,

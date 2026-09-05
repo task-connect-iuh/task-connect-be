@@ -12,6 +12,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import vn.taskconnect.auth.api.AuthFacade;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.user.api.SkillVerificationStatus;
@@ -39,15 +40,17 @@ public class UserProfileService {
     private final TaskerSkillProfileRepository skillRepository;
     private final ServiceCategoryRepository categoryRepository;
     private final TaskerAvailabilityRepository availabilityRepository;
+    private final AuthFacade authFacade;
     private final Clock clock;
 
     public UserProfileService(UserProfileRepository profileRepository,
             TaskerSkillProfileRepository skillRepository, ServiceCategoryRepository categoryRepository,
-            TaskerAvailabilityRepository availabilityRepository, Clock clock) {
+            TaskerAvailabilityRepository availabilityRepository, AuthFacade authFacade, Clock clock) {
         this.profileRepository = profileRepository;
         this.skillRepository = skillRepository;
         this.categoryRepository = categoryRepository;
         this.availabilityRepository = availabilityRepository;
+        this.authFacade = authFacade;
         this.clock = clock;
     }
 
@@ -76,7 +79,8 @@ public class UserProfileService {
                 .findByAccountIdOrderByDayOfWeekAscStartTimeAsc(accountId).stream()
                 .map(AvailabilitySlotResponse::from)
                 .toList();
-        return PublicProfileResponse.from(profile, verifiedSkillsOf(accountId), availability);
+        return PublicProfileResponse.from(profile, verifiedSkillsOf(accountId), availability,
+                authFacade.findAccount(accountId).orElse(null));
     }
 
     /**

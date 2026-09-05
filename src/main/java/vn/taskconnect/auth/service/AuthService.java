@@ -24,6 +24,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.taskconnect.auth.api.AccountRole;
 import vn.taskconnect.auth.api.AccountStatus;
+import vn.taskconnect.auth.api.event.EmailChangeNewOtpRequestedEvent;
+import vn.taskconnect.auth.api.event.EmailChangeOldOtpRequestedEvent;
+import vn.taskconnect.auth.api.event.EmailChangedEvent;
 import vn.taskconnect.auth.api.event.EmailVerificationRequestedEvent;
 import vn.taskconnect.auth.api.event.PasswordResetRequestedEvent;
 import vn.taskconnect.auth.dto.request.ChangePasswordRequest;
@@ -32,20 +35,25 @@ import vn.taskconnect.auth.dto.request.GoogleLoginRequest;
 import vn.taskconnect.auth.dto.request.GrantAdminRoleRequest;
 import vn.taskconnect.auth.dto.request.LoginRequest;
 import vn.taskconnect.auth.dto.request.RegisterRequest;
+import vn.taskconnect.auth.dto.request.RequestNewEmailRequest;
 import vn.taskconnect.auth.dto.request.ResendVerificationRequest;
 import vn.taskconnect.auth.dto.request.ResetPasswordRequest;
 import vn.taskconnect.auth.dto.request.RevokeAdminRoleRequest;
+import vn.taskconnect.auth.dto.request.UpdatePhoneRequest;
+import vn.taskconnect.auth.dto.request.VerifyEmailChangeOtpRequest;
 import vn.taskconnect.auth.dto.request.VerifyEmailRequest;
 import vn.taskconnect.auth.dto.response.ForgotPasswordResponse;
 import vn.taskconnect.auth.dto.response.ResendVerificationResponse;
 import vn.taskconnect.auth.dto.response.TokenResponse;
 import vn.taskconnect.auth.entity.AuthAccount;
 import vn.taskconnect.auth.entity.AuthAccountRole;
+import vn.taskconnect.auth.entity.AuthEmailChangeToken;
 import vn.taskconnect.auth.entity.AuthEmailVerificationToken;
 import vn.taskconnect.auth.entity.AuthPasswordResetToken;
 import vn.taskconnect.auth.entity.AuthRefreshToken;
 import vn.taskconnect.auth.repository.AuthAccountRepository;
 import vn.taskconnect.auth.repository.AuthAccountRoleRepository;
+import vn.taskconnect.auth.repository.AuthEmailChangeTokenRepository;
 import vn.taskconnect.auth.repository.AuthEmailVerificationTokenRepository;
 import vn.taskconnect.auth.repository.AuthPasswordResetTokenRepository;
 import vn.taskconnect.auth.repository.AuthRefreshTokenRepository;
@@ -88,6 +96,7 @@ public class AuthService {
     private final AuthRefreshTokenRepository refreshTokenRepository;
     private final AuthEmailVerificationTokenRepository verificationTokenRepository;
     private final AuthPasswordResetTokenRepository passwordResetTokenRepository;
+    private final AuthEmailChangeTokenRepository emailChangeTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final UserFacade userFacade;
@@ -101,7 +110,8 @@ public class AuthService {
     public AuthService(AuthAccountRepository accountRepository, AuthAccountRoleRepository accountRoleRepository,
             AuthRefreshTokenRepository refreshTokenRepository,
             AuthEmailVerificationTokenRepository verificationTokenRepository,
-            AuthPasswordResetTokenRepository passwordResetTokenRepository, PasswordEncoder passwordEncoder,
+            AuthPasswordResetTokenRepository passwordResetTokenRepository,
+            AuthEmailChangeTokenRepository emailChangeTokenRepository, PasswordEncoder passwordEncoder,
             JwtTokenProvider tokenProvider, GoogleTokenVerifierService googleTokenVerifier,
             JwtProperties jwtProperties, AdminProperties adminProperties, UserFacade userFacade,
             ApplicationEventPublisher eventPublisher, Clock clock) {
@@ -110,6 +120,7 @@ public class AuthService {
         this.refreshTokenRepository = refreshTokenRepository;
         this.verificationTokenRepository = verificationTokenRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.emailChangeTokenRepository = emailChangeTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
         this.userFacade = userFacade;
@@ -195,7 +206,7 @@ public class AuthService {
             throw new BusinessException(ErrorCode.GOOGLE_LINK_CONFIRMATION_REQUIRED);
         }
 
-        return createGoogleAccount(email, profile.googleId());
+        return createGoogleAccount(email, profile.googleId(), profile.name());
     }
 
     /**
@@ -246,12 +257,12 @@ public class AuthService {
      * 2 role TASK_POSTER + TASKER giong register() (quyet dinh da chot: tai khoan tu dang ky
      * luon mang ca 2 vai tro), roi cap token ngay - khong qua OTP.
      *
-     * <p>Tao luon ho so ban dau (createInitialProfile) giong register(), dung email lam
-     * fullName tam: Google ID token (Google Identity Services, xem loginWithGoogle()) khong
-     * mang theo name claim (chi googleId/email/emailVerified, xem GoogleProfile), nen khong
-     * co ten that de dien - nguoi dung tu sua lai ten that tren trang Ho so sau.
+     * <p>Tao luon ho so ban dau (createInitialProfile) giong register(), dung claim "name"
+     * cua Google (xem GoogleProfile/GoogleTokenVerifierService) lam fullName neu Google co
+     * tra ve; fallback ve email khi claim nay null/rong (token phat voi scope thu hep) - nguoi
+     * dung van sua lai ten tren trang Ho so duoc sau do.
      */
-    private TokenResponse createGoogleAccount(String email, String googleId) {
+    private TokenResponse createGoogleAccount(String email, String googleId, String name) {
         Instant now = clock.instant();
         AuthAccount account = AuthAccount.createFromGoogle(UUID.randomUUID(), email, googleId, now);
         try {
@@ -264,7 +275,8 @@ public class AuthService {
             accountRoleRepository.save(new AuthAccountRole(UUID.randomUUID(), account.getId(), role, now));
         }
 
-        userFacade.createInitialProfile(account.getId(), email);
+        String fullName = (name != null && !name.isBlank()) ? name.trim() : email;
+        userFacade.createInitialProfile(account.getId(), fullName);
 
         return issueTokens(account, rolesOf(account.getId()));
     }
@@ -578,6 +590,180 @@ public class AuthService {
 
         refreshTokenRepository.findByAccountIdAndRevokedAtIsNull(accountId)
                 .forEach(refreshToken -> refreshToken.revoke(now));
+    }
+
+    /**
+     * Doi so dien thoai cua chinh minh - chi kiem tra trung (khong cho 2 tai khoan cung
+     * dung 1 so), khong validate dinh dang (giong register(), phone chi la String tu do).
+     * Idempotent: gui lai dung so hien tai thi bo qua, khong bao loi trung voi chinh minh.
+     */
+    @Transactional
+    public void updatePhone(UUID accountId, UpdatePhoneRequest request) {
+        AuthAccount account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHENTICATED));
+
+        String phone = normalizePhone(request.phone());
+        if (phone != null && phone.equals(account.getPhone())) {
+            return;
+        }
+        if (phone != null && accountRepository.existsByPhoneAndIdNot(phone, accountId)) {
+            throw new BusinessException(ErrorCode.PHONE_EXISTS);
+        }
+
+        account.updatePhone(phone, clock.instant());
+        try {
+            accountRepository.saveAndFlush(account);
+        } catch (DataIntegrityViolationException ex) {
+            throw new BusinessException(ErrorCode.PHONE_EXISTS);
+        }
+    }
+
+    /**
+     * Buoc 1 cua luong doi email (goi lai duoc cho nut "Gui lai ma"): gui OTP toi email
+     * HIEN TAI de xac minh quyen so huu truoc khi cho nhap email moi - xem
+     * AuthEmailChangeToken javadoc. Khong validate email hien tai qua duoc phep doi hay
+     * khong (khac han register/login), chi can dang dang nhap (isAuthenticated() o
+     * controller) la du.
+     *
+     * <p>Cooldown 60s (OTP_RESEND_COOLDOWN) chong spam: goi lai trong luc dang cooldown se
+     * bo qua hoan toan (khong xoa, khong tao token moi, khong gui mail) - GIU NGUYEN tien do
+     * dang co (vd da xac minh email cu roi, dang o buoc nhap email moi), khong reset ve dau.
+     */
+    @Transactional
+    public void requestEmailChange(UUID accountId) {
+        Instant now = clock.instant();
+        Optional<AuthEmailChangeToken> existing = emailChangeTokenRepository.findByAccountId(accountId);
+        if (existing.isPresent() && existing.get().getCreatedAt().plus(OTP_RESEND_COOLDOWN).isAfter(now)) {
+            return;
+        }
+
+        AuthAccount account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHENTICATED));
+
+        emailChangeTokenRepository.deleteByAccountId(accountId);
+
+        String otp = generateOtp();
+        emailChangeTokenRepository.save(new AuthEmailChangeToken(
+                UUID.randomUUID(), accountId, passwordEncoder.encode(otp), now.plus(OTP_TTL), now));
+        eventPublisher.publishEvent(new EmailChangeOldOtpRequestedEvent(accountId, account.getEmail(), otp, OTP_TTL));
+    }
+
+    /**
+     * Buoc 2: xac minh OTP da gui toi email hien tai. Idempotent - da xac minh roi thi bo
+     * qua, khong bao loi, cho phep FE goi lai an toan. Cung bay noRollbackFor nhu
+     * verifyEmail() - nhanh sai OTP tang attempt_count roi nem BusinessException ngay sau.
+     */
+    @Transactional(noRollbackFor = BusinessException.class)
+    public void verifyOldEmailForChange(UUID accountId, VerifyEmailChangeOtpRequest request) {
+        AuthEmailChangeToken token = emailChangeTokenRepository.findByAccountId(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EMAIL_CHANGE_NOT_REQUESTED));
+        if (token.isOldVerified()) {
+            return;
+        }
+
+        Instant now = clock.instant();
+        if (token.isOldOtpExpired(now)) {
+            throw new BusinessException(ErrorCode.EXPIRED_EMAIL_CHANGE_OTP);
+        }
+        if (!passwordEncoder.matches(request.otp(), token.getOldOtpHash())) {
+            boolean burned = token.registerOldFailedAttempt(MAX_OTP_ATTEMPTS);
+            emailChangeTokenRepository.save(token);
+            if (burned) {
+                emailChangeTokenRepository.deleteByAccountId(accountId);
+                throw new BusinessException(ErrorCode.TOO_MANY_EMAIL_CHANGE_OTP_ATTEMPTS);
+            }
+            throw new BusinessException(ErrorCode.INVALID_EMAIL_CHANGE_OTP);
+        }
+
+        token.markOldVerified(now);
+        emailChangeTokenRepository.save(token);
+    }
+
+    /**
+     * Buoc 3: da xac minh email hien tai xong, nhan email moi ung vien va gui OTP rieng toi
+     * dia chi do (goi lai duoc cho nut "Gui lai ma" o buoc 4). Chan neu trung voi email hien
+     * tai hoac da duoc tai khoan khac dung - tranh nguoi dung cho het thoi gian OTP roi moi
+     * biet email khong dung duoc.
+     *
+     * <p>Cooldown 60s giong requestEmailChange() - goi lai trong luc dang cooldown thi bo
+     * qua hoan toan, khong gui lai mail. Tinh moc gui gan nhat tu newOtpExpiresAt - OTP_TTL
+     * (thoi diem OTP hien tai duoc sinh ra) vi entity khong luu rieng "new_otp_created_at".
+     */
+    @Transactional
+    public void requestNewEmailForChange(UUID accountId, RequestNewEmailRequest request) {
+        AuthEmailChangeToken token = emailChangeTokenRepository.findByAccountId(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EMAIL_CHANGE_NOT_REQUESTED));
+        if (!token.isOldVerified()) {
+            throw new BusinessException(ErrorCode.OLD_EMAIL_NOT_VERIFIED);
+        }
+
+        Instant now = clock.instant();
+        if (token.getNewOtpExpiresAt() != null
+                && token.getNewOtpExpiresAt().minus(OTP_TTL).plus(OTP_RESEND_COOLDOWN).isAfter(now)) {
+            return;
+        }
+
+        AuthAccount account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHENTICATED));
+        String newEmail = normalizeEmail(request.newEmail());
+        if (newEmail.equals(normalizeEmail(account.getEmail()))) {
+            throw new BusinessException(ErrorCode.NEW_EMAIL_SAME_AS_CURRENT);
+        }
+        if (accountRepository.existsByEmail(newEmail)) {
+            throw new BusinessException(ErrorCode.EMAIL_EXISTS);
+        }
+
+        String otp = generateOtp();
+        token.challengeNewEmail(newEmail, passwordEncoder.encode(otp), now.plus(OTP_TTL));
+        emailChangeTokenRepository.save(token);
+        eventPublisher.publishEvent(new EmailChangeNewOtpRequestedEvent(accountId, newEmail, otp, OTP_TTL));
+    }
+
+    /**
+     * Buoc 4 (cuoi): xac minh OTP da gui toi email moi - thanh cong thi thuc su doi
+     * auth_accounts.email va phat EmailChangedEvent de Notification bao cho ca 2 dia chi.
+     * Kiem tra existsByEmail them lan nua (khong chi luc requestNewEmailForChange): email
+     * moi co the vua duoc tai khoan khac dang ky xong trong luc cho nhap OTP.
+     */
+    @Transactional(noRollbackFor = BusinessException.class)
+    public void confirmEmailChange(UUID accountId, VerifyEmailChangeOtpRequest request) {
+        AuthEmailChangeToken token = emailChangeTokenRepository.findByAccountId(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EMAIL_CHANGE_NOT_REQUESTED));
+        if (token.getNewEmail() == null || token.getNewOtpHash() == null) {
+            throw new BusinessException(ErrorCode.EMAIL_CHANGE_NOT_REQUESTED);
+        }
+
+        Instant now = clock.instant();
+        if (token.isNewOtpExpired(now)) {
+            throw new BusinessException(ErrorCode.EXPIRED_EMAIL_CHANGE_OTP);
+        }
+        if (!passwordEncoder.matches(request.otp(), token.getNewOtpHash())) {
+            boolean burned = token.registerNewFailedAttempt(MAX_OTP_ATTEMPTS);
+            emailChangeTokenRepository.save(token);
+            if (burned) {
+                emailChangeTokenRepository.deleteByAccountId(accountId);
+                throw new BusinessException(ErrorCode.TOO_MANY_EMAIL_CHANGE_OTP_ATTEMPTS);
+            }
+            throw new BusinessException(ErrorCode.INVALID_EMAIL_CHANGE_OTP);
+        }
+
+        String newEmail = token.getNewEmail();
+        if (accountRepository.existsByEmail(newEmail)) {
+            throw new BusinessException(ErrorCode.EMAIL_EXISTS);
+        }
+
+        AuthAccount account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHENTICATED));
+        String oldEmail = account.getEmail();
+        account.changeEmail(newEmail, now);
+        try {
+            accountRepository.saveAndFlush(account);
+        } catch (DataIntegrityViolationException ex) {
+            throw new BusinessException(ErrorCode.EMAIL_EXISTS);
+        }
+
+        emailChangeTokenRepository.deleteByAccountId(accountId);
+        eventPublisher.publishEvent(new EmailChangedEvent(accountId, oldEmail, newEmail));
     }
 
     /**

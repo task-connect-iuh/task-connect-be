@@ -111,7 +111,7 @@ class TaskerSkillServiceTest {
 
     private static KycVerification verifiedKycOf(UUID accountId) {
         KycVerification kyc = new KycVerification(UUID.randomUUID(), accountId, "Nguyen Van A",
-                new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(3600));
+                new byte[0], new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(3600));
         kyc.approve(UUID.randomUUID(), FIXED_NOW.minusSeconds(1800));
         return kyc;
     }
