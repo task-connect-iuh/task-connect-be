@@ -12,6 +12,7 @@ import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -26,6 +27,7 @@ import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.common.storage.S3PresignedUploadService;
 import vn.taskconnect.user.api.CertificationStatus;
+import vn.taskconnect.user.api.Gender;
 import vn.taskconnect.user.api.SkillVerificationStatus;
 import vn.taskconnect.user.dto.request.RejectCertificationRequest;
 import vn.taskconnect.user.dto.request.SubmitSkillRequest;
@@ -110,10 +112,16 @@ class TaskerSkillServiceTest {
     }
 
     private static KycVerification verifiedKycOf(UUID accountId) {
-        KycVerification kyc = new KycVerification(UUID.randomUUID(), accountId, "Nguyen Van A",
+        KycVerification kyc = new KycVerification(UUID.randomUUID(), accountId, "Nguyen Van A", LocalDate.of(1995, 6, 20), Gender.MALE,
                 new byte[0], new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(3600));
         kyc.approve(UUID.randomUUID(), FIXED_NOW.minusSeconds(1800));
         return kyc;
+    }
+
+    /** KYC moi nop, con dang VERIFYING (chua duyet) - dai dien cho "da nop nhung chua VERIFIED", dung de test requireKycSubmitted() khong doi hoi VERIFIED. */
+    private static KycVerification submittedKycOf(UUID accountId) {
+        return new KycVerification(UUID.randomUUID(), accountId, "Nguyen Van A", LocalDate.of(1995, 6, 20), Gender.MALE,
+                new byte[0], new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(3600));
     }
 
     private static SubmitSkillRequest requestFor(UUID accountId) {
@@ -122,17 +130,19 @@ class TaskerSkillServiceTest {
                 null, null);
     }
 
-    private void givenValidCategoryKycAndRequirement() {
+    private void givenValidCategoryAndRequirement() {
         when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(activeCategoryOf(CATEGORY_ID)));
+        // requireKycSubmitted() chi doi hoi CO ban ghi KYC, khong doi hoi VERIFIED - dung ban
+        // ghi con VERIFYING de the hien dung dieu do (khac gate rieng cua approve()).
         when(kycRepository.findFirstByAccountIdOrderBySubmittedAtDesc(ACCOUNT_ID))
-                .thenReturn(Optional.of(verifiedKycOf(ACCOUNT_ID)));
+                .thenReturn(Optional.of(submittedKycOf(ACCOUNT_ID)));
         when(requirementRepository.findByCategoryId(CATEGORY_ID))
                 .thenReturn(List.of(requirementOf(CATEGORY_ID, CERTIFICATE_TYPE_ID)));
     }
 
     @Test
     void should_createPendingSkillAndCertification_when_firstSubmissionForCategory() {
-        givenValidCategoryKycAndRequirement();
+        givenValidCategoryAndRequirement();
         when(skillRepository.findByAccountIdAndCategoryId(ACCOUNT_ID, CATEGORY_ID)).thenReturn(Optional.empty());
         when(skillRepository.save(any(TaskerSkillProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(certificationRepository.save(any(TaskerCertification.class)))
@@ -162,21 +172,34 @@ class TaskerSkillServiceTest {
     }
 
     @Test
-    void should_throwKycNotVerified_when_kycNeverSubmitted() {
+    void should_throwKycNotSubmitted_when_kycNeverSubmitted() {
         when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(activeCategoryOf(CATEGORY_ID)));
         when(kycRepository.findFirstByAccountIdOrderBySubmittedAtDesc(ACCOUNT_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.submitSkill(ACCOUNT_ID, requestFor(ACCOUNT_ID)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).errorCode())
-                .isEqualTo(ErrorCode.KYC_NOT_VERIFIED);
+                .isEqualTo(ErrorCode.KYC_NOT_SUBMITTED);
+    }
+
+    @Test
+    void should_createPendingSkillAndCertification_when_kycSubmittedButNotYetVerified() {
+        givenValidCategoryAndRequirement();
+        when(skillRepository.findByAccountIdAndCategoryId(ACCOUNT_ID, CATEGORY_ID)).thenReturn(Optional.empty());
+        when(skillRepository.save(any(TaskerSkillProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(certificationRepository.save(any(TaskerCertification.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskerSkillResponse response = service.submitSkill(ACCOUNT_ID, requestFor(ACCOUNT_ID));
+
+        assertThat(response.verificationStatus()).isEqualTo(SkillVerificationStatus.PENDING);
     }
 
     @Test
     void should_throwInvalidCertificateTypeForCategory_when_certificateTypeNotAccepted() {
         when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(activeCategoryOf(CATEGORY_ID)));
         when(kycRepository.findFirstByAccountIdOrderBySubmittedAtDesc(ACCOUNT_ID))
-                .thenReturn(Optional.of(verifiedKycOf(ACCOUNT_ID)));
+                .thenReturn(Optional.of(submittedKycOf(ACCOUNT_ID)));
         when(requirementRepository.findByCategoryId(CATEGORY_ID))
                 .thenReturn(List.of(requirementOf(CATEGORY_ID, UUID.randomUUID())));
 
@@ -188,7 +211,7 @@ class TaskerSkillServiceTest {
 
     @Test
     void should_throwValidationFailed_when_fileKeyDoesNotBelongToAccountAndCategory() {
-        givenValidCategoryKycAndRequirement();
+        givenValidCategoryAndRequirement();
         when(skillRepository.findByAccountIdAndCategoryId(ACCOUNT_ID, CATEGORY_ID)).thenReturn(Optional.empty());
         SubmitSkillRequest request = new SubmitSkillRequest(CATEGORY_ID, 3, null, null, CERTIFICATE_TYPE_ID,
                 null, null, null, null, "certificates/" + UUID.randomUUID() + "/" + CATEGORY_ID + "/x.jpg",
@@ -202,7 +225,7 @@ class TaskerSkillServiceTest {
 
     @Test
     void should_throwSkillAlreadyVerified_when_profileAlreadyVerifiedForCategory() {
-        givenValidCategoryKycAndRequirement();
+        givenValidCategoryAndRequirement();
         TaskerSkillProfile verified = new TaskerSkillProfile(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID, 2, null,
                 null, FIXED_NOW.minusSeconds(3600));
         verified.markVerified(FIXED_NOW.minusSeconds(1800));
@@ -217,7 +240,7 @@ class TaskerSkillServiceTest {
 
     @Test
     void should_throwSkillPendingReview_when_profileAlreadyPendingForCategory() {
-        givenValidCategoryKycAndRequirement();
+        givenValidCategoryAndRequirement();
         TaskerSkillProfile pending = new TaskerSkillProfile(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID, 2, null,
                 null, FIXED_NOW.minusSeconds(3600));
         when(skillRepository.findByAccountIdAndCategoryId(ACCOUNT_ID, CATEGORY_ID))
@@ -231,7 +254,7 @@ class TaskerSkillServiceTest {
 
     @Test
     void should_allowResubmissionAndResetToPending_when_profileWasRejected() {
-        givenValidCategoryKycAndRequirement();
+        givenValidCategoryAndRequirement();
         TaskerSkillProfile rejected = new TaskerSkillProfile(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID, 1, null,
                 null, FIXED_NOW.minusSeconds(3600));
         rejected.markRejected(FIXED_NOW.minusSeconds(1800));
@@ -254,6 +277,8 @@ class TaskerSkillServiceTest {
                 CERTIFICATE_TYPE_ID, null, null, null, null, new byte[0], null, null,
                 FIXED_NOW.minusSeconds(60));
         when(certificationRepository.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
+        when(kycRepository.findFirstByAccountIdOrderBySubmittedAtDesc(ACCOUNT_ID))
+                .thenReturn(Optional.of(verifiedKycOf(ACCOUNT_ID)));
         TaskerSkillProfile profile = new TaskerSkillProfile(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID, 2, null,
                 null, FIXED_NOW.minusSeconds(60));
         when(skillRepository.findByAccountIdAndCategoryId(ACCOUNT_ID, CATEGORY_ID))
@@ -278,6 +303,20 @@ class TaskerSkillServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).errorCode())
                 .isEqualTo(ErrorCode.CERTIFICATION_NOT_PENDING_REVIEW);
+    }
+
+    @Test
+    void should_throwKycNotVerified_when_approvingCertificationOfAccountWithoutVerifiedKyc() {
+        TaskerCertification pending = new TaskerCertification(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID,
+                CERTIFICATE_TYPE_ID, null, null, null, null, new byte[0], null, null,
+                FIXED_NOW.minusSeconds(60));
+        when(certificationRepository.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
+        when(kycRepository.findFirstByAccountIdOrderBySubmittedAtDesc(ACCOUNT_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.approve(pending.getId(), UUID.randomUUID()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).errorCode())
+                .isEqualTo(ErrorCode.KYC_NOT_VERIFIED);
     }
 
     @Test
@@ -378,12 +417,14 @@ class TaskerSkillServiceTest {
     }
 
     @Test
-    void should_returnSummaryPage_when_listingCertificationsForReview() {
+    void should_returnSummaryPageWithKycVerifiedFlag_when_listingCertificationsForReview() {
         TaskerCertification pending = new TaskerCertification(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID,
                 CERTIFICATE_TYPE_ID, null, null, null, null, new byte[0], null, null, FIXED_NOW);
         PageRequest pageable = PageRequest.of(0, 20);
         when(certificationRepository.findByStatus(CertificationStatus.PENDING_REVIEW, pageable))
                 .thenReturn(new PageImpl<>(List.of(pending), pageable, 1));
+        when(kycRepository.findLatestByAccountIdIn(List.of(ACCOUNT_ID)))
+                .thenReturn(List.of(verifiedKycOf(ACCOUNT_ID)));
 
         Page<CertificationReviewSummaryResponse> result =
                 service.listCertificationsForReview(CertificationStatus.PENDING_REVIEW, pageable);
@@ -393,5 +434,21 @@ class TaskerSkillServiceTest {
         assertThat(result.getContent().get(0).id()).isEqualTo(pending.getId());
         assertThat(result.getContent().get(0).accountId()).isEqualTo(ACCOUNT_ID);
         assertThat(result.getContent().get(0).categoryId()).isEqualTo(CATEGORY_ID);
+        assertThat(result.getContent().get(0).kycVerified()).isTrue();
+    }
+
+    @Test
+    void should_returnKycVerifiedFalse_when_listingCertificationsForReviewOfAccountWithoutVerifiedKyc() {
+        TaskerCertification pending = new TaskerCertification(UUID.randomUUID(), ACCOUNT_ID, CATEGORY_ID,
+                CERTIFICATE_TYPE_ID, null, null, null, null, new byte[0], null, null, FIXED_NOW);
+        PageRequest pageable = PageRequest.of(0, 20);
+        when(certificationRepository.findByStatus(CertificationStatus.PENDING_REVIEW, pageable))
+                .thenReturn(new PageImpl<>(List.of(pending), pageable, 1));
+        when(kycRepository.findLatestByAccountIdIn(List.of(ACCOUNT_ID))).thenReturn(List.of());
+
+        Page<CertificationReviewSummaryResponse> result =
+                service.listCertificationsForReview(CertificationStatus.PENDING_REVIEW, pageable);
+
+        assertThat(result.getContent().get(0).kycVerified()).isFalse();
     }
 }

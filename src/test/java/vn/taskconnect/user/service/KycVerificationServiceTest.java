@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -26,6 +27,7 @@ import vn.taskconnect.common.crypto.CryptoProperties;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.common.storage.S3PresignedUploadService;
+import vn.taskconnect.user.api.Gender;
 import vn.taskconnect.user.api.KycStatus;
 import vn.taskconnect.user.dto.request.RejectKycRequest;
 import vn.taskconnect.user.dto.request.SubmitKycRequest;
@@ -58,7 +60,7 @@ class KycVerificationServiceTest {
             kycRepository, idNumberLockRepository, profileRepository, encryptionService, s3Service, clock);
 
     private static SubmitKycRequest requestFor(UUID accountId) {
-        return new SubmitKycRequest("Nguyen Van A", "079203001234",
+        return new SubmitKycRequest("Nguyen Van A", LocalDate.of(1995, 6, 20), Gender.MALE, "079203001234",
                 "kyc/" + accountId + "/front.jpg", "kyc/" + accountId + "/back.jpg");
     }
 
@@ -93,7 +95,7 @@ class KycVerificationServiceTest {
 
     @Test
     void should_throwKycAlreadyVerifying_when_latestSubmissionStillPending() {
-        KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+        KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", LocalDate.of(1995, 6, 20), Gender.MALE,
                 new byte[0], new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
         when(kycRepository.findFirstByAccountIdOrderBySubmittedAtDesc(ACCOUNT_ID))
                 .thenReturn(Optional.of(pending));
@@ -107,7 +109,7 @@ class KycVerificationServiceTest {
 
     @Test
     void should_throwKycAlreadyVerified_when_latestSubmissionAlreadyVerified() {
-        KycVerification verified = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+        KycVerification verified = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", LocalDate.of(1995, 6, 20), Gender.MALE,
                 new byte[0], new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
         verified.approve(UUID.randomUUID(), FIXED_NOW.minusSeconds(30));
         when(kycRepository.findFirstByAccountIdOrderBySubmittedAtDesc(ACCOUNT_ID))
@@ -121,7 +123,7 @@ class KycVerificationServiceTest {
 
     @Test
     void should_allowResubmission_when_latestSubmissionWasRejected() {
-        KycVerification rejected = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+        KycVerification rejected = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", LocalDate.of(1995, 6, 20), Gender.MALE,
                 new byte[0], new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
         rejected.reject(UUID.randomUUID(), "Anh mo, khong doc duoc", FIXED_NOW.minusSeconds(30));
         when(kycRepository.findFirstByAccountIdOrderBySubmittedAtDesc(ACCOUNT_ID))
@@ -137,8 +139,8 @@ class KycVerificationServiceTest {
     @Test
     void should_throwValidationFailed_when_imageKeyDoesNotBelongToAccount() {
         when(kycRepository.findFirstByAccountIdOrderBySubmittedAtDesc(ACCOUNT_ID)).thenReturn(Optional.empty());
-        SubmitKycRequest request = new SubmitKycRequest("Nguyen Van A", "079203001234",
-                "kyc/" + UUID.randomUUID() + "/front.jpg", "kyc/" + ACCOUNT_ID + "/back.jpg");
+        SubmitKycRequest request = new SubmitKycRequest("Nguyen Van A", LocalDate.of(1995, 6, 20), Gender.MALE,
+                "079203001234", "kyc/" + UUID.randomUUID() + "/front.jpg", "kyc/" + ACCOUNT_ID + "/back.jpg");
 
         assertThatThrownBy(() -> service.submitKyc(ACCOUNT_ID, request))
                 .isInstanceOf(BusinessException.class)
@@ -160,7 +162,7 @@ class KycVerificationServiceTest {
     @Test
     void should_approveAndSyncProfile_when_pendingReviewFound() {
         UUID adminId = UUID.randomUUID();
-        KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+        KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", LocalDate.of(1995, 6, 20), Gender.MALE,
                 new byte[0], new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
         when(kycRepository.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
         UserProfile profile = new UserProfile(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", "Quan 7", FIXED_NOW);
@@ -176,7 +178,7 @@ class KycVerificationServiceTest {
 
     @Test
     void should_throwKycNotPendingReview_when_approvingAlreadyReviewedSubmission() {
-        KycVerification alreadyVerified = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+        KycVerification alreadyVerified = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", LocalDate.of(1995, 6, 20), Gender.MALE,
                 new byte[0], new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
         alreadyVerified.approve(UUID.randomUUID(), FIXED_NOW.minusSeconds(30));
         when(kycRepository.findByIdForUpdate(alreadyVerified.getId())).thenReturn(Optional.of(alreadyVerified));
@@ -190,7 +192,7 @@ class KycVerificationServiceTest {
     @Test
     void should_reject_when_pendingReviewFound() {
         UUID adminId = UUID.randomUUID();
-        KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+        KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", LocalDate.of(1995, 6, 20), Gender.MALE,
                 new byte[0], new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
         when(kycRepository.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
         when(profileRepository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
@@ -203,7 +205,7 @@ class KycVerificationServiceTest {
 
     @Test
     void should_cancelAndSyncProfile_when_ownerCancelsPendingSubmission() {
-        KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+        KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", LocalDate.of(1995, 6, 20), Gender.MALE,
                 new byte[0], new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
         when(kycRepository.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
         UserProfile profile = new UserProfile(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", "Quan 7", FIXED_NOW);
@@ -218,7 +220,7 @@ class KycVerificationServiceTest {
 
     @Test
     void should_throwKycNotFound_when_cancelingSomeoneElsesSubmission() {
-        KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+        KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", LocalDate.of(1995, 6, 20), Gender.MALE,
                 new byte[0], new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
         when(kycRepository.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
 
@@ -230,7 +232,7 @@ class KycVerificationServiceTest {
 
     @Test
     void should_throwKycNotPendingReview_when_cancelingAlreadyReviewedSubmission() {
-        KycVerification approved = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+        KycVerification approved = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", LocalDate.of(1995, 6, 20), Gender.MALE,
                 new byte[0], new byte[0], new byte[0], new byte[0], FIXED_NOW.minusSeconds(60));
         approved.approve(UUID.randomUUID(), FIXED_NOW.minusSeconds(30));
         when(kycRepository.findByIdForUpdate(approved.getId())).thenReturn(Optional.of(approved));
@@ -244,6 +246,7 @@ class KycVerificationServiceTest {
     @Test
     void should_returnDecryptedDetailWithPresignedViewUrls_when_adminReviewsLatestSubmission() {
         KycVerification verification = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+                LocalDate.of(1995, 6, 20), Gender.MALE,
                 encryptionService.encrypt("079203001234"),
                 new byte[32],
                 encryptionService.encrypt("kyc/" + ACCOUNT_ID + "/front.jpg"),
@@ -261,11 +264,14 @@ class KycVerificationServiceTest {
         assertThat(response.idNumber()).isEqualTo("079203001234");
         assertThat(response.idCardFrontViewUrl()).isEqualTo("https://s3.example/front-signed");
         assertThat(response.idCardBackViewUrl()).isEqualTo("https://s3.example/back-signed");
+        assertThat(response.dateOfBirth()).isEqualTo(LocalDate.of(1995, 6, 20));
+        assertThat(response.gender()).isEqualTo(Gender.MALE);
     }
 
     @Test
     void should_returnSummaryPage_when_listingForReview() {
         KycVerification pending = new KycVerification(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A",
+                LocalDate.of(1995, 6, 20), Gender.MALE,
                 encryptionService.encrypt("079203001234"), new byte[32], encryptionService.encrypt("front-key"),
                 encryptionService.encrypt("back-key"), FIXED_NOW);
         PageRequest pageable = PageRequest.of(0, 20);

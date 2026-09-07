@@ -1,6 +1,7 @@
 package vn.taskconnect.user.repository;
 
 import jakarta.persistence.LockModeType;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -42,4 +43,15 @@ public interface KycVerificationRepository extends JpaRepository<KycVerification
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select k from KycVerification k where k.id = :id")
     Optional<KycVerification> findByIdForUpdate(@Param("id") UUID id);
+
+    /**
+     * Lan nop KYC gan nhat cua tung tai khoan trong danh sach - dung cho trang duyet chung
+     * chi cua Admin (badge "Da xac thuc KYC" ben canh ten tai khoan, xem
+     * TaskerSkillService.listCertificationsForReview) de biet truoc trang thai KYC ma khong
+     * phai bam vao tung dong. Ban theo lo cua findFirstByAccountIdOrderBySubmittedAtDesc,
+     * tranh N+1 tren mot trang co the toi 100 dong.
+     */
+    @Query("select k from KycVerification k where k.accountId in :accountIds and k.submittedAt = "
+            + "(select max(k2.submittedAt) from KycVerification k2 where k2.accountId = k.accountId)")
+    List<KycVerification> findLatestByAccountIdIn(@Param("accountIds") List<UUID> accountIds);
 }

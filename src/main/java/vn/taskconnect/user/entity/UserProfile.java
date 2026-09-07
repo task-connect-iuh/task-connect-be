@@ -52,6 +52,11 @@ public class UserProfile {
     @Column(name = "location_lng", precision = 10, scale = 7)
     private BigDecimal locationLng;
 
+    // Ban kinh lam viec uu tien (km) Tasker tu khai bao quanh khu vuc hoat dong - null neu
+    // chua khai bao, xem V17__add_preferred_radius_to_user_profiles.sql.
+    @Column(name = "preferred_radius_km")
+    private Integer preferredRadiusKm;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "kyc_status", nullable = false, length = 20)
     private KycStatus kycStatus;
@@ -86,7 +91,8 @@ public class UserProfile {
      * co the null neu nguoi dung khong khai bao toa do.
      */
     public void updateDetails(String fullName, String avatarUrl, String addressText, String bio,
-            String operatingArea, BigDecimal locationLat, BigDecimal locationLng, Instant now) {
+            String operatingArea, BigDecimal locationLat, BigDecimal locationLng, Integer preferredRadiusKm,
+            Instant now) {
         this.fullName = fullName;
         this.avatarUrl = avatarUrl;
         this.addressText = addressText;
@@ -94,6 +100,7 @@ public class UserProfile {
         this.operatingArea = operatingArea;
         this.locationLat = locationLat;
         this.locationLng = locationLng;
+        this.preferredRadiusKm = preferredRadiusKm;
         this.updatedAt = now;
     }
 
@@ -148,6 +155,11 @@ public class UserProfile {
     /** Kinh do toa do hoat dong, null neu nguoi dung khong khai bao toa do. */
     public BigDecimal getLocationLng() {
         return locationLng;
+    }
+
+    /** Ban kinh lam viec uu tien (km) Tasker tu khai bao, null neu chua khai bao. */
+    public Integer getPreferredRadiusKm() {
+        return preferredRadiusKm;
     }
 
     /** Trang thai KYC hien tai, dong bo tu module KYC (Buoc 4) khi duoc duyet/tu choi. */

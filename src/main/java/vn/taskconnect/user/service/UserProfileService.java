@@ -128,7 +128,7 @@ public class UserProfileService {
         String operatingArea = requireOnFirstCreate(request.operatingArea(), ErrorCode.MISSING_OPERATING_AREA);
         UserProfile profile = new UserProfile(UUID.randomUUID(), accountId, fullName, operatingArea, now);
         profile.updateDetails(fullName, request.avatarUrl(), request.addressText(), request.bio(), operatingArea,
-                request.locationLat(), request.locationLng(), now);
+                request.locationLat(), request.locationLng(), request.preferredRadiusKm(), now);
         try {
             return profileRepository.saveAndFlush(profile);
         } catch (DataIntegrityViolationException ex) {
@@ -152,17 +152,20 @@ public class UserProfileService {
         String operatingArea = request.operatingArea() != null ? request.operatingArea() : profile.getOperatingArea();
         BigDecimal locationLat = request.locationLat() != null ? request.locationLat() : profile.getLocationLat();
         BigDecimal locationLng = request.locationLng() != null ? request.locationLng() : profile.getLocationLng();
+        Integer preferredRadiusKm = request.preferredRadiusKm() != null ? request.preferredRadiusKm() : profile.getPreferredRadiusKm();
 
         if (Objects.equals(fullName, profile.getFullName()) && Objects.equals(avatarUrl, profile.getAvatarUrl())
                 && Objects.equals(addressText, profile.getAddressText())
                 && Objects.equals(bio, profile.getBio())
                 && Objects.equals(operatingArea, profile.getOperatingArea())
                 && isSameNumericValue(locationLat, profile.getLocationLat())
-                && isSameNumericValue(locationLng, profile.getLocationLng())) {
+                && isSameNumericValue(locationLng, profile.getLocationLng())
+                && Objects.equals(preferredRadiusKm, profile.getPreferredRadiusKm())) {
             return profile;
         }
 
-        profile.updateDetails(fullName, avatarUrl, addressText, bio, operatingArea, locationLat, locationLng, now);
+        profile.updateDetails(fullName, avatarUrl, addressText, bio, operatingArea, locationLat, locationLng,
+                preferredRadiusKm, now);
         return profileRepository.save(profile);
     }
 
