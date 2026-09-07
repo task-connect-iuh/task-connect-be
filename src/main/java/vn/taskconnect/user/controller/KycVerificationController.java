@@ -29,8 +29,9 @@ import vn.taskconnect.user.service.KycVerificationService;
 
 /**
  * Endpoint xac minh danh tinh (KYC) - Buoc 4. Chi Tasker can KYC (UC05 "Xac minh danh tinh
- * Tasker", Task Poster khong can) - 3 endpoint tu phuc vu (nop ho so, xin presigned URL tai
- * anh CCCD, xem trang thai cua chinh minh) yeu cau hasRole('TASKER'). Ba endpoint con lai
+ * Tasker", Task Poster khong can) - 4 endpoint tu phuc vu (nop ho so, xin presigned URL tai
+ * anh CCCD, xem trang thai cua chinh minh, xem chi tiet ho so vua nop) yeu cau hasRole('TASKER').
+ * Ba endpoint con lai
  * (xem chi tiet, duyet, tu choi) chi danh cho Admin - dat trong module User vi
  * user_kyc_verifications thuoc module nay, dung theo quy uoc "tien to URL theo module so
  * huu tai nguyen" cua 16-api-contract.md, khong phai theo vai tro nguoi goi.
@@ -72,6 +73,18 @@ public class KycVerificationController {
     @PreAuthorize("hasRole('TASKER')")
     public ApiResponse<KycStatusResponse> getMyLatestKyc(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
         return ApiResponse.ok(KycStatusResponse.from(kycService.getMyLatestKyc(principal.accountId())));
+    }
+
+    /**
+     * Chinh chu tu xem chi tiet lan nop KYC gan nhat cua minh - kem so CCCD da giai ma va
+     * presigned GET URL ngan han de xem lai anh mat truoc/sau, dung cho nut "Xem hồ sơ đã gửi"
+     * trong luc dang cho duyet (VERIFYING). Dung chung kycService.getLatestKycForReview() voi
+     * man hinh Admin xet duyet, chi khac accountId truyen vao la cua chinh nguoi goi.
+     */
+    @GetMapping("/me/kyc-verifications/latest/detail")
+    @PreAuthorize("hasRole('TASKER')")
+    public ApiResponse<KycReviewDetailResponse> getMyLatestKycDetail(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
+        return ApiResponse.ok(kycService.getLatestKycForReview(principal.accountId()));
     }
 
     /**

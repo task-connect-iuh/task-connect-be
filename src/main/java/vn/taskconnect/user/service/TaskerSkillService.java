@@ -25,6 +25,7 @@ import vn.taskconnect.user.dto.response.CertificationReviewResponse;
 import vn.taskconnect.user.dto.response.CertificationReviewSummaryResponse;
 import vn.taskconnect.user.dto.response.TaskerSkillResponse;
 import vn.taskconnect.user.entity.CategoryCertificateRequirement;
+import vn.taskconnect.user.entity.KycVerification;
 import vn.taskconnect.user.entity.ServiceCategory;
 import vn.taskconnect.user.entity.TaskerCertification;
 import vn.taskconnect.user.entity.TaskerSkillProfile;
@@ -38,10 +39,17 @@ import vn.taskconnect.user.repository.UserProfileRepository;
 
 /**
  * Nghiep vu dang ky ky nang Tasker gop nop chung chi (Buoc 6) - mot giao dien, mot lan
- * submit cho moi category: kinh nghiem, gia, va chung chi cung luc. Chan cung neu KYC (Buoc
- * 4) chua VERIFIED. Quan he OR trong tung category (xem V5__seed_user_certificate_types.sql):
- * chi can MOT chung chi hop le duoc Admin duyet la ho so ky nang cua category do chuyen
- * VERIFIED - khong phai duyet het tat ca chung chi liet ke cho category.
+ * submit cho moi category: kinh nghiem, gia, va chung chi cung luc. Hai gate KYC (Buoc 4)
+ * tach rieng theo hai muc do, khong con doi hoi KYC VERIFIED ngay luc nop nhu ban dau:
+ * - submitSkill(): chi doi hoi tai khoan DA TUNG NOP KYC it nhat 1 lan (bat ky trang thai
+ *   nao - VERIFYING/VERIFIED/REJECTED deu duoc, xem requireKycSubmitted) - dieu huong Tasker
+ *   lam KYC truoc nhung khong bat cho duyet xong moi duoc nop tiep chung chi.
+ * - approve(): doi hoi KYC dang VERIFIED (xem requireKycVerified) - vi chi luc Admin thuc su
+ *   cong nhan chung chi, danh tinh nguoi nop moi bat buoc phai da xac minh xong.
+ * Quyet dinh o docs/PROGRESS-USER-MODULE.md. Quan he OR trong tung category (xem
+ * V5__seed_user_certificate_types.sql): chi can MOT chung chi hop le duoc Admin duyet la ho
+ * so ky nang cua category do chuyen VERIFIED - khong phai duyet het tat ca chung chi liet ke
+ * cho category.
  */
 @Service
 public class TaskerSkillService {
@@ -84,7 +92,7 @@ public class TaskerSkillService {
     @Transactional
     public TaskerSkillResponse submitSkill(UUID accountId, SubmitSkillRequest request) {
         requireCategoryExists(request.categoryId());
-        requireKycVerified(accountId);
+        requireKycSubmitted(accountId);
         requireValidCertificateType(request.categoryId(), request.certificateTypeId());
         requireDateOrder(request.issuedDate(), request.expiryDate());
         requireOwnCertificatePrefix(accountId, request.categoryId(), request.fileKey());
@@ -144,33 +152,43 @@ public class TaskerSkillService {
      * (khong giai ma so hieu chung chi, khong ky presigned URL) - xem chi tiet that su goi
      * getCertificationsForReview(accountId, categoryId) rieng.
      *
-     * <p>Enrich them ten that/avatar tu user_profiles va ten nhom dich vu tu
-     * user_service_categories - FE truoc gio hien thang accountId/categoryId dang UUID tho o
-     * cot "Tai khoan"/"Nhom dich vu", khong dung lam nghia cho nguoi xet duyet. Tim theo lo
-     * (findByAccountIdIn/findAllById) thay vi goi lai repository trong vong lap, tranh N+1
-     * tren mot trang co the toi 100 dong.
+     * <p>Enrich them ten that/avatar tu user_profiles, ten nhom dich vu tu
+     * user_service_categories, va trang thai KYC gan nhat cua tai khoan tu
+     * user_kyc_verifications (badge "Da xac thuc KYC" o FE, xem
+     * CertificationReviewSummaryResponse) - FE truoc gio hien thang accountId/categoryId dang
+     * UUID tho o cot "Tai khoan"/"Nhom dich vu", khong dung lam nghia cho nguoi xet duyet, va
+     * Admin phai bam "Xem" tung dong moi biet truoc duoc/khong duoc duyet vi thieu KYC. Tim
+     * theo lo (findByAccountIdIn/findAllById/findLatestByAccountIdIn) thay vi goi lai
+     * repository trong vong lap, tranh N+1 tren mot trang co the toi 100 dong.
      */
     @Transactional(readOnly = true)
     public Page<CertificationReviewSummaryResponse> listCertificationsForReview(CertificationStatus status,
             Pageable pageable) {
         Page<TaskerCertification> page = certificationRepository.findByStatus(status, pageable);
-        Map<UUID, UserProfile> profileByAccountId = profileRepository
-                .findByAccountIdIn(page.map(TaskerCertification::getAccountId).toList())
-                .stream()
+        List<UUID> accountIds = page.map(TaskerCertification::getAccountId).toList();
+        Map<UUID, UserProfile> profileByAccountId = profileRepository.findByAccountIdIn(accountIds).stream()
                 .collect(Collectors.toMap(UserProfile::getAccountId, profile -> profile));
         Map<UUID, ServiceCategory> categoryById = categoryRepository
                 .findAllById(page.map(TaskerCertification::getCategoryId).toList())
                 .stream()
                 .collect(Collectors.toMap(ServiceCategory::getId, category -> category));
+        Map<UUID, Boolean> kycVerifiedByAccountId = kycRepository.findLatestByAccountIdIn(accountIds).stream()
+                .collect(Collectors.toMap(KycVerification::getAccountId, kyc -> kyc.getStatus() == KycStatus.VERIFIED));
         return page.map(certification -> CertificationReviewSummaryResponse.from(certification,
                 profileByAccountId.get(certification.getAccountId()),
-                categoryById.get(certification.getCategoryId())));
+                categoryById.get(certification.getCategoryId()),
+                kycVerifiedByAccountId.getOrDefault(certification.getAccountId(), false)));
     }
 
-    /** Admin duyet mot lan nop chung chi - chuyen ca chung chi lan ho so ky nang cua category do sang VERIFIED. */
+    /**
+     * Admin duyet mot lan nop chung chi - chuyen ca chung chi lan ho so ky nang cua category
+     * do sang VERIFIED. Chan cung neu tai khoan nop chung chi chua co KYC VERIFIED (xem
+     * requireKycVerified) - submitSkill() khong con chan o buoc nop, nen phai chan lai o day.
+     */
     @Transactional
     public TaskerSkillResponse approve(UUID certificationId, UUID adminAccountId) {
         TaskerCertification certification = requirePendingReview(certificationId);
+        requireKycVerified(certification.getAccountId());
         Instant now = clock.instant();
         certification.approve(adminAccountId, now);
         TaskerSkillProfile profile = requireSkillProfile(certification.getAccountId(), certification.getCategoryId());
@@ -240,9 +258,14 @@ public class TaskerSkillService {
         UUID latestId = latestCertification != null ? latestCertification.getId() : null;
         CertificationStatus latestStatus = latestCertification != null ? latestCertification.getStatus() : null;
         String latestRejectionReason = latestCertification != null ? latestCertification.getRejectionReason() : null;
+        String latestCertificateNumber = latestCertification != null && latestCertification.getCertificateNumberEnc() != null
+                ? encryptionService.decrypt(latestCertification.getCertificateNumberEnc())
+                : null;
+        String latestIssuingAuthority = latestCertification != null ? latestCertification.getIssuingAuthority() : null;
+        LocalDate latestIssuedDate = latestCertification != null ? latestCertification.getIssuedDate() : null;
         return new TaskerSkillResponse(profile.getCategoryId(), profile.getYearsExperience(), profile.getPriceMin(),
                 profile.getPriceMax(), profile.getVerificationStatus(), profile.getVerifiedAt(), latestId,
-                latestStatus, latestRejectionReason);
+                latestStatus, latestRejectionReason, latestCertificateNumber, latestIssuingAuthority, latestIssuedDate);
     }
 
     private CertificationReviewResponse toReviewResponse(TaskerCertification certification) {
@@ -273,7 +296,22 @@ public class TaskerSkillService {
         }
     }
 
-    /** Chan cung: phai co lan nop KYC gan nhat va dang VERIFIED - xem quyet dinh o docs/PROGRESS-USER-MODULE.md. */
+    /**
+     * Chan cung o buoc submitSkill(): tai khoan phai da tung nop it nhat 1 lan KYC (bat ky
+     * trang thai nao, khong bat buoc VERIFIED - xem KYC_NOT_SUBMITTED khac KYC_NOT_VERIFIED
+     * o requireKycVerified ben duoi). Dieu huong Tasker lam KYC truoc khi khai bao ky nang,
+     * nhung khong bat cho duyet KYC xong moi duoc nop tiep chung chi.
+     */
+    private void requireKycSubmitted(UUID accountId) {
+        if (kycRepository.findFirstByAccountIdOrderBySubmittedAtDesc(accountId).isEmpty()) {
+            throw new BusinessException(ErrorCode.KYC_NOT_SUBMITTED);
+        }
+    }
+
+    /**
+     * Chan cung o buoc approve(): tai khoan nop chung chi phai co lan nop KYC gan nhat va
+     * dang VERIFIED - xem quyet dinh o docs/PROGRESS-USER-MODULE.md.
+     */
     private void requireKycVerified(UUID accountId) {
         boolean verified = kycRepository.findFirstByAccountIdOrderBySubmittedAtDesc(accountId)
                 .map(kyc -> kyc.getStatus() == KycStatus.VERIFIED)

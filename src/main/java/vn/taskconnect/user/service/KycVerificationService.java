@@ -94,6 +94,8 @@ public class KycVerificationService {
                 UUID.randomUUID(),
                 accountId,
                 request.fullNameOnId(),
+                request.dateOfBirth(),
+                request.gender(),
                 encryptionService.encrypt(request.idNumber()),
                 idNumberHash,
                 encryptionService.encrypt(request.idCardFrontKey()),
@@ -151,9 +153,10 @@ public class KycVerificationService {
     }
 
     /**
-     * Chi danh cho Admin: doc lan nop gan nhat cua mot tai khoan bat ky kem giai ma so
-     * CCCD va sinh presigned GET URL ngan han de xem anh mat truoc/sau - phuc vu man hinh
-     * xet duyet, khong luu lai URL nay o dau ca.
+     * Doc lan nop gan nhat cua mot tai khoan kem giai ma so CCCD va sinh presigned GET URL
+     * ngan han de xem anh mat truoc/sau - phuc vu man hinh Admin xet duyet (accountId bat ky)
+     * VA nut "Xem hồ sơ đã gửi" tu phuc vu cua chinh Tasker (accountId la cua nguoi goi, xem
+     * KycVerificationController.getMyLatestKycDetail). Khong luu lai URL nay o dau ca.
      */
     @Transactional(readOnly = true)
     public KycReviewDetailResponse getLatestKycForReview(UUID accountId) {
@@ -166,6 +169,8 @@ public class KycVerificationService {
                 verification.getId(),
                 verification.getAccountId(),
                 verification.getFullNameOnId(),
+                verification.getDateOfBirth(),
+                verification.getGender(),
                 idNumber,
                 s3Service.createPresignedGetUrl(frontKey, VIEW_URL_TTL),
                 s3Service.createPresignedGetUrl(backKey, VIEW_URL_TTL),

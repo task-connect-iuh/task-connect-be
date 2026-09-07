@@ -17,6 +17,11 @@ import vn.taskconnect.user.entity.UserProfile;
  * tu user_service_categories - ca hai chi de FE hien dung ten nguoi nop/ten nhom dich vu thay
  * vi accountId/categoryId dang UUID tho. Co the null neu tai khoan chua co ho so hoac category
  * (hiem, category bi xoa sau khi da nop) - FE tu fallback khi null.
+ *
+ * <p>{@code kycVerified} - trang thai KYC gan nhat cua tai khoan nop (VERIFIED hay khong),
+ * de FE hien badge "Da xac thuc KYC" ngay canh ten thay vi Admin phai bam "Xem" tung dong moi
+ * biet - Admin khong duyet duoc chung chi neu khong VERIFIED (xem
+ * TaskerSkillService.requireKycVerified), nen bao truoc de tranh bam nham roi bi tu choi.
  */
 public record CertificationReviewSummaryResponse(
         UUID id,
@@ -27,12 +32,13 @@ public record CertificationReviewSummaryResponse(
         String categoryName,
         UUID certificateTypeId,
         CertificationStatus status,
-        Instant submittedAt
+        Instant submittedAt,
+        boolean kycVerified
 ) {
 
     /** Chuyen entity sang DTO tom tat, khong dung truong _enc nao. profile/category co the null. */
     public static CertificationReviewSummaryResponse from(TaskerCertification certification, UserProfile profile,
-            ServiceCategory category) {
+            ServiceCategory category, boolean kycVerified) {
         return new CertificationReviewSummaryResponse(
                 certification.getId(),
                 certification.getAccountId(),
@@ -42,6 +48,7 @@ public record CertificationReviewSummaryResponse(
                 category != null ? category.getName() : null,
                 certification.getCertificateTypeId(),
                 certification.getStatus(),
-                certification.getSubmittedAt());
+                certification.getSubmittedAt(),
+                kycVerified);
     }
 }

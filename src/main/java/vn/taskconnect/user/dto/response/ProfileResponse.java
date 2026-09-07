@@ -19,6 +19,7 @@ public record ProfileResponse(
         String operatingArea,
         BigDecimal locationLat,
         BigDecimal locationLng,
+        Integer preferredRadiusKm,
         KycStatus kycStatus,
         String email,
         String phone
@@ -35,6 +36,7 @@ public record ProfileResponse(
                 profile.getOperatingArea(),
                 profile.getLocationLat(),
                 profile.getLocationLng(),
+                profile.getPreferredRadiusKm(),
                 profile.getKycStatus(),
                 account != null ? account.email() : null,
                 account != null ? account.phone() : null);

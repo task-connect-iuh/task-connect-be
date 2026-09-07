@@ -7,9 +7,11 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import vn.taskconnect.user.api.Gender;
 import vn.taskconnect.user.api.KycStatus;
 
 /**
@@ -34,6 +36,15 @@ public class KycVerification {
 
     @Column(name = "full_name_on_id", nullable = false, length = 150, updatable = false)
     private String fullNameOnId;
+
+    // Them tu V16, cot NULL-able o DB (ban ghi cu truoc migration khong co du lieu) nhung
+    // luon duoc gui bat buoc tu V16 tro di - xem SubmitKycRequest.
+    @Column(name = "date_of_birth", updatable = false)
+    private LocalDate dateOfBirth;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender", length = 10, updatable = false)
+    private Gender gender;
 
     // @JdbcTypeCode(SqlTypes.VARBINARY) bat buoc: byte[] khong co chu thich se khien
     // Hibernate suy doan kieu JDBC khac VARBINARY that trong V2 migration, dan den
@@ -80,11 +91,14 @@ public class KycVerification {
     }
 
     /** Tao mot lan nop moi, luon bat dau o trang thai VERIFYING (default cua cot trong V2). */
-    public KycVerification(UUID id, UUID accountId, String fullNameOnId, byte[] idNumberEnc, byte[] idNumberHash,
-            byte[] idCardFrontUrlEnc, byte[] idCardBackUrlEnc, Instant submittedAt) {
+    public KycVerification(UUID id, UUID accountId, String fullNameOnId, LocalDate dateOfBirth, Gender gender,
+            byte[] idNumberEnc, byte[] idNumberHash, byte[] idCardFrontUrlEnc, byte[] idCardBackUrlEnc,
+            Instant submittedAt) {
         this.id = id;
         this.accountId = accountId;
         this.fullNameOnId = fullNameOnId;
+        this.dateOfBirth = dateOfBirth;
+        this.gender = gender;
         this.idNumberEnc = idNumberEnc;
         this.idNumberHash = idNumberHash;
         this.idCardFrontUrlEnc = idCardFrontUrlEnc;
@@ -129,6 +143,16 @@ public class KycVerification {
     /** Ho ten in tren CCCD, co the khac fullName hien thi o user_profiles. */
     public String getFullNameOnId() {
         return fullNameOnId;
+    }
+
+    /** Ngay sinh tren CCCD - null cho cac ban ghi nop truoc V16. */
+    public LocalDate getDateOfBirth() {
+        return dateOfBirth;
+    }
+
+    /** Gioi tinh tren CCCD - null cho cac ban ghi nop truoc V16. */
+    public Gender getGender() {
+        return gender;
     }
 
     /** So CCCD da ma hoa (blob IV+ciphertext+tag), giai ma bang AesEncryptionService khi can hien thi. */
