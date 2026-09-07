@@ -150,6 +150,12 @@ public enum ErrorCode {
             "Không thể huỷ công việc đã được giao."),
     FIELD_LOCKED_HAS_APPLICANTS("TSK-409-FIELD_LOCKED_HAS_APPLICANTS", HttpStatus.CONFLICT,
             "Không thể sửa thông tin này khi đã có người ứng tuyển."),
+    TASK_NOT_FOUND("TSK-404-TASK_NOT_FOUND", HttpStatus.NOT_FOUND,
+            "Không tìm thấy công việc."),
+    TOO_MANY_TASK_IMAGES("TSK-400-TOO_MANY_IMAGES", HttpStatus.BAD_REQUEST,
+            "Chỉ được đăng tối đa 5 ảnh minh hoạ cho một công việc."),
+    UNSUPPORTED_TASK_IMAGE_TYPE("TSK-400-UNSUPPORTED_IMAGE_TYPE", HttpStatus.BAD_REQUEST,
+            "Định dạng ảnh không được hỗ trợ. Chỉ chấp nhận JPEG, PNG hoặc WEBP."),
 
     // --- MATCH ---
     NO_TASKER_FOUND("MATCH-404-NO_TASKER_FOUND", HttpStatus.NOT_FOUND,
