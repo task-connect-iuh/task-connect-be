@@ -156,6 +156,16 @@ public enum ErrorCode {
             "Chỉ được đăng tối đa 5 ảnh minh hoạ cho một công việc."),
     UNSUPPORTED_TASK_IMAGE_TYPE("TSK-400-UNSUPPORTED_IMAGE_TYPE", HttpStatus.BAD_REQUEST,
             "Định dạng ảnh không được hỗ trợ. Chỉ chấp nhận JPEG, PNG hoặc WEBP."),
+    TASK_NOT_OPEN("TSK-409-TASK_NOT_OPEN", HttpStatus.CONFLICT,
+            "Công việc này không còn nhận ứng tuyển."),
+    ALREADY_APPLIED("TSK-409-ALREADY_APPLIED", HttpStatus.CONFLICT,
+            "Bạn đã ứng tuyển công việc này rồi."),
+    CANNOT_APPLY_OWN_TASK("TSK-403-CANNOT_APPLY_OWN_TASK", HttpStatus.FORBIDDEN,
+            "Không thể ứng tuyển công việc do chính bạn đăng."),
+    APPLICATION_NOT_FOUND("TSK-404-APPLICATION_NOT_FOUND", HttpStatus.NOT_FOUND,
+            "Không tìm thấy đơn ứng tuyển."),
+    APPLICATION_NOT_PENDING("TSK-409-APPLICATION_NOT_PENDING", HttpStatus.CONFLICT,
+            "Đơn ứng tuyển này đã được xử lý."),
 
     // --- MATCH ---
     NO_TASKER_FOUND("MATCH-404-NO_TASKER_FOUND", HttpStatus.NOT_FOUND,
