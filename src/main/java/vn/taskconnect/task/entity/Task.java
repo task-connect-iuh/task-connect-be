@@ -116,6 +116,17 @@ public class Task {
                 scheduledAt, estimatedWorkersNeeded, TaskStatus.OPEN, now);
     }
 
+    /**
+     * Poster xac nhan mot Tasker cho cong viec nay (UC11, gioi han doi trang thai - xem
+     * docs/TASK-MODULE-SPLIT.md) - chuyen OPEN sang ASSIGNED. Dieu kien task dang OPEN kiem
+     * tra o TaskApplicationService, khong validate lai trong entity (cung convention voi
+     * KycVerification.approve()/reject()).
+     */
+    public void assignTo(Instant now) {
+        this.status = TaskStatus.ASSIGNED;
+        this.updatedAt = now;
+    }
+
     /** Id noi bo cua cong viec. */
     public UUID getId() {
         return id;
