@@ -60,6 +60,8 @@ import vn.taskconnect.auth.repository.AuthRefreshTokenRepository;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.security.AdminProperties;
+import vn.taskconnect.security.firebase.FirebasePhoneProfile;
+import vn.taskconnect.security.firebase.FirebaseTokenVerifierService;
 import vn.taskconnect.security.google.GoogleProfile;
 import vn.taskconnect.security.google.GoogleTokenVerifierService;
 import vn.taskconnect.security.jwt.JwtProperties;
@@ -101,6 +103,7 @@ public class AuthService {
     private final JwtTokenProvider tokenProvider;
     private final UserFacade userFacade;
     private final GoogleTokenVerifierService googleTokenVerifier;
+    private final FirebaseTokenVerifierService firebaseTokenVerifier;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
     private final Duration refreshTokenTtl;
@@ -113,6 +116,7 @@ public class AuthService {
             AuthPasswordResetTokenRepository passwordResetTokenRepository,
             AuthEmailChangeTokenRepository emailChangeTokenRepository, PasswordEncoder passwordEncoder,
             JwtTokenProvider tokenProvider, GoogleTokenVerifierService googleTokenVerifier,
+            FirebaseTokenVerifierService firebaseTokenVerifier,
             JwtProperties jwtProperties, AdminProperties adminProperties, UserFacade userFacade,
             ApplicationEventPublisher eventPublisher, Clock clock) {
         this.accountRepository = accountRepository;
@@ -125,6 +129,7 @@ public class AuthService {
         this.tokenProvider = tokenProvider;
         this.userFacade = userFacade;
         this.googleTokenVerifier = googleTokenVerifier;
+        this.firebaseTokenVerifier = firebaseTokenVerifier;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
         this.refreshTokenTtl = Duration.ofDays(jwtProperties.refreshTokenTtlDays());
@@ -153,17 +158,16 @@ public class AuthService {
         }
 
         String email = normalizeEmail(request.email());
-        String phone = normalizePhone(request.phone());
 
         if (accountRepository.existsByEmail(email)) {
             throw new BusinessException(ErrorCode.EMAIL_EXISTS);
         }
-        if (phone != null && accountRepository.existsByPhone(phone)) {
-            throw new BusinessException(ErrorCode.PHONE_EXISTS);
-        }
 
         Instant now = clock.instant();
-        AuthAccount account = new AuthAccount(UUID.randomUUID(), email, phone,
+        // phone khong con thu thap luc dang ky (quyet dinh da chot) - nguoi dung xac minh so
+        // dien thoai qua Firebase Phone Auth sau lan dang nhap dau tien, xem
+        // PhoneVerificationGatePage.tsx ben FE va issueTokens()/TokenResponse.firstLogin duoi day.
+        AuthAccount account = new AuthAccount(UUID.randomUUID(), email, null,
                 passwordEncoder.encode(request.password()), AccountStatus.UNVERIFIED, now);
         try {
             accountRepository.saveAndFlush(account);
@@ -246,10 +250,11 @@ public class AuthService {
             throw new BusinessException(ErrorCode.ACCOUNT_LOCKED);
         }
 
+        boolean firstLogin = account.getLastLoginAt() == null;
         account.recordSuccessfulLogin(now);
         accountRepository.save(account);
 
-        return issueTokens(account, rolesOf(account.getId()));
+        return issueTokens(account, rolesOf(account.getId()), firstLogin);
     }
 
     /**
@@ -261,6 +266,13 @@ public class AuthService {
      * cua Google (xem GoogleProfile/GoogleTokenVerifierService) lam fullName neu Google co
      * tra ve; fallback ve email khi claim nay null/rong (token phat voi scope thu hep) - nguoi
      * dung van sua lai ten tren trang Ho so duoc sau do.
+     *
+     * <p>Goi recordSuccessfulLogin() ngay tai day (khac ban truoc khi co TokenResponse.firstLogin
+     * - luc do lastLoginAt bi bo trong cho toi lan dang nhap Google ke tiep): tai khoan Google
+     * moi tao duoc cap token ngay, tuc la phien dang nhap DAU TIEN cua no dien ra ngay trong
+     * cung request nay - neu khong ghi lastLoginAt tai day, lan dang nhap Google KE TIEP se lai
+     * doc duoc lastLoginAt == null va bi tinh nham la "lan dau tien" lan thu 2, khien man xac
+     * minh so dien thoai hien lai sai quy tac "chi 1 lan duy nhat".
      */
     private TokenResponse createGoogleAccount(String email, String googleId, String name) {
         Instant now = clock.instant();
@@ -277,8 +289,10 @@ public class AuthService {
 
         String fullName = (name != null && !name.isBlank()) ? name.trim() : email;
         userFacade.createInitialProfile(account.getId(), fullName);
+        account.recordSuccessfulLogin(now);
+        accountRepository.save(account);
 
-        return issueTokens(account, rolesOf(account.getId()));
+        return issueTokens(account, rolesOf(account.getId()), true);
     }
 
     /**
@@ -327,10 +341,14 @@ public class AuthService {
             throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
         }
 
+        // lastLoginAt con null tuc day la lan dang nhap thanh cong DAU TIEN cua tai khoan -
+        // phai doc TRUOC khi recordSuccessfulLogin() ghi de, dung lam tin hieu dieu huong FE
+        // sang man xac minh so dien thoai (chi hien dung 1 lan, xem TokenResponse.firstLogin).
+        boolean firstLogin = account.getLastLoginAt() == null;
         account.recordSuccessfulLogin(now);
         accountRepository.save(account);
 
-        return issueTokens(account, rolesOf(account.getId()));
+        return issueTokens(account, rolesOf(account.getId()), firstLogin);
     }
 
     /**
@@ -384,7 +402,9 @@ public class AuthService {
 
         stored.revoke(now);
 
-        return issueTokens(account, rolesOf(account.getId()));
+        // firstLogin luon false o day - refresh() khong bao gio tinh la lan dang nhap dau
+        // tien, du la lan goi issueTokens() dau tien cho refresh token nay.
+        return issueTokens(account, rolesOf(account.getId()), false);
     }
 
     /**
@@ -593,24 +613,54 @@ public class AuthService {
     }
 
     /**
-     * Doi so dien thoai cua chinh minh - chi kiem tra trung (khong cho 2 tai khoan cung
-     * dung 1 so), khong validate dinh dang (giong register(), phone chi la String tu do).
-     * Idempotent: gui lai dung so hien tai thi bo qua, khong bao loi trung voi chinh minh.
+     * Doi so dien thoai cua chinh minh - PHAI xac minh qua Firebase Phone Auth truoc khi luu
+     * (dao nguoc Decision Log #31 "chi kiem tra trung, khong validate dinh dang": tu nay bat
+     * buoc chung minh quyen so huu qua OTP that/test-whitelist cua Firebase, khong con duong
+     * ghi phone tu do nhu truoc). Khong bao gio tin request.phone() mot minh - luon doi chieu
+     * voi claim phone_number cua chinh newFirebaseIdToken da verify, tranh truong hop token
+     * hop le cho MOT so nhung request lai gui kem mot so khac. Idempotent: gui lai dung so
+     * hien tai (da tung xac minh) thi bo qua, khong bao loi trung voi chinh minh.
+     *
+     * <p>Neu tai khoan DA CO so dien thoai duoc xac minh truoc do (doi so, khac lan dau them
+     * so), bat buoc kem them oldFirebaseIdToken chung minh nguoi goi van con quyen so huu so
+     * HIEN TAI - chan truong hop mot phien dang nhap bi chiem doat tu doi thang sang so cua ke
+     * tan cong ma khong can chung minh gi voi so cu (cung tinh than "xac minh email cu truoc"
+     * cua doi email, xem requestEmailChange()/verifyOldEmailForChange()). Khac doi email: day
+     * KHONG dung OTP luu server (AuthEmailChangeToken) vi Firebase Phone Auth tu quan ly toan
+     * bo vong doi OTP o phia client, nen chi can verify lai chinh idToken do qua Firebase Admin
+     * SDK va doi chieu voi so dang luu trong DB, khong can bang rieng.
      */
     @Transactional
     public void updatePhone(UUID accountId, UpdatePhoneRequest request) {
         AuthAccount account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHENTICATED));
 
+        if (account.getPhone() != null && account.getPhoneVerifiedAt() != null) {
+            String oldToken = request.oldFirebaseIdToken();
+            if (oldToken == null || oldToken.isBlank()) {
+                throw new BusinessException(ErrorCode.OLD_PHONE_NOT_VERIFIED);
+            }
+            FirebasePhoneProfile oldProfile = firebaseTokenVerifier.verify(oldToken);
+            if (!oldProfile.phoneNumber().equals(toE164(account.getPhone()))) {
+                throw new BusinessException(ErrorCode.OLD_PHONE_NOT_VERIFIED);
+            }
+        }
+
+        FirebasePhoneProfile profile = firebaseTokenVerifier.verify(request.newFirebaseIdToken());
         String phone = normalizePhone(request.phone());
-        if (phone != null && phone.equals(account.getPhone())) {
+        if (phone == null || !profile.phoneNumber().equals(toE164(phone))) {
+            throw new BusinessException(ErrorCode.PHONE_VERIFICATION_MISMATCH);
+        }
+
+        Instant now = clock.instant();
+        if (phone.equals(account.getPhone()) && account.getPhoneVerifiedAt() != null) {
             return;
         }
-        if (phone != null && accountRepository.existsByPhoneAndIdNot(phone, accountId)) {
+        if (accountRepository.existsByPhoneAndIdNot(phone, accountId)) {
             throw new BusinessException(ErrorCode.PHONE_EXISTS);
         }
 
-        account.updatePhone(phone, clock.instant());
+        account.updatePhone(phone, now, now);
         try {
             accountRepository.saveAndFlush(account);
         } catch (DataIntegrityViolationException ex) {
@@ -863,7 +913,7 @@ public class AuthService {
         return String.format(Locale.ROOT, "%06d", secureRandom.nextInt(OTP_BOUND));
     }
 
-    private TokenResponse issueTokens(AuthAccount account, Set<AccountRole> roles) {
+    private TokenResponse issueTokens(AuthAccount account, Set<AccountRole> roles, boolean firstLogin) {
         Set<String> roleNames = roles.stream().map(Enum::name).collect(Collectors.toSet());
         String accessToken = tokenProvider.generateAccessToken(account.getId(), roleNames);
 
@@ -874,7 +924,7 @@ public class AuthService {
         refreshTokenRepository.save(refreshToken);
 
         return new TokenResponse(accessToken, rawRefreshToken, "Bearer", tokenProvider.accessTokenTtlSeconds(),
-                account.getId(), account.getStatus(), roles);
+                account.getId(), account.getStatus(), roles, firstLogin);
     }
 
     private Set<AccountRole> rolesOf(UUID accountId) {
@@ -892,6 +942,16 @@ public class AuthService {
             return null;
         }
         return phone.trim();
+    }
+
+    /**
+     * Quy doi so dang dia phuong (0xxxxxxxxx, dung PHONE_PATTERN ben FE) sang E.164
+     * (+84xxxxxxxxx) - dang Firebase luon tra ve trong claim phone_number cua ID token, dung
+     * de doi chieu voi request.phone() trong updatePhone(). Chi ho tro dau so Viet Nam (+84),
+     * du pham vi tinh nang hien tai (xac minh so dien thoai qua whitelist Firebase de demo).
+     */
+    private String toE164(String localPhone) {
+        return "+84" + localPhone.substring(1);
     }
 
     private BusinessException duplicateAccountError(DataIntegrityViolationException ex) {

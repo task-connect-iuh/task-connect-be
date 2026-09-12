@@ -227,8 +227,12 @@ public class AuthController {
     }
 
     /**
-     * Doi so dien thoai cua chinh minh - loi AUTH-409-PHONE_EXISTS neu da co tai khoan khac
-     * dung so nay. Khac change-password: khong thu hoi phien, khong can dang nhap lai.
+     * Doi so dien thoai cua chinh minh - request phai kem firebaseIdToken vua xac minh xong
+     * o FE (Firebase Phone Auth), AuthService xac minh lai token nay qua Firebase Admin SDK
+     * va doi chieu claim phone_number truoc khi cho luu, loi AUTH-409-PHONE_EXISTS neu da co
+     * tai khoan khac dung so nay. Dung chung cho ca man xac minh sau lan dang nhap dau tien
+     * lan doi/them so o trang Ho so. Khac change-password: khong thu hoi phien, khong can
+     * dang nhap lai.
      */
     @PatchMapping("/me/phone")
     @PreAuthorize("isAuthenticated()")

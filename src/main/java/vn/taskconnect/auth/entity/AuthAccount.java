@@ -32,6 +32,15 @@ public class AuthAccount {
     private String phone;
 
     /**
+     * Thoi diem xac minh so dien thoai qua Firebase Phone Auth thanh cong gan nhat - NULL
+     * nghia la phone (neu co) chua duoc xac minh. Luon duoc ghi cung luc voi phone trong
+     * updatePhone(), khong bao gio lech nhau: AuthService khong con duong nao ghi phone ma
+     * khong kem xac minh Firebase.
+     */
+    @Column(name = "phone_verified_at")
+    private Instant phoneVerifiedAt;
+
+    /**
      * Dinh danh Google (claim "sub" trong ID token) - NULL neu tai khoan chua tung dang nhap
      * qua Google. Duy nhat tren toan bang, xem uq_auth_accounts_google_id trong
      * V11__add_google_oauth_to_auth_accounts.sql.
@@ -177,12 +186,16 @@ public class AuthAccount {
     }
 
     /**
-     * Doi so dien thoai sau khi da dang ky - AuthService.updatePhone() da kiem tra trung
-     * truoc khi goi ham nay (existsByPhoneAndIdNot), UNIQUE KEY tren cot phone (xem
-     * V1__create_auth_tables.sql) la lop chan cuoi cung chong race condition.
+     * Doi so dien thoai sau khi da dang ky - AuthService.updatePhone() da xac minh
+     * firebaseIdToken qua Firebase Admin SDK va doi chieu claim phone_number khop voi
+     * so nay TRUOC khi goi ham nay, roi moi kiem tra trung (existsByPhoneAndIdNot); UNIQUE
+     * KEY tren cot phone (xem V1__create_auth_tables.sql) la lop chan cuoi cung chong race
+     * condition. verifiedAt luon duoc ghi cung phone trong cung 1 lan goi - khong con duong
+     * nao ghi phone ma khong kem xac minh.
      */
-    public void updatePhone(String phone, Instant now) {
+    public void updatePhone(String phone, Instant verifiedAt, Instant now) {
         this.phone = phone;
+        this.phoneVerifiedAt = verifiedAt;
         this.updatedAt = now;
     }
 
@@ -198,6 +211,10 @@ public class AuthAccount {
         return phone;
     }
 
+    public Instant getPhoneVerifiedAt() {
+        return phoneVerifiedAt;
+    }
+
     public String getGoogleId() {
         return googleId;
     }
@@ -208,5 +225,9 @@ public class AuthAccount {
 
     public AccountStatus getStatus() {
         return status;
+    }
+
+    public Instant getLastLoginAt() {
+        return lastLoginAt;
     }
 }

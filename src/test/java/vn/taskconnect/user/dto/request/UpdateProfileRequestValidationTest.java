@@ -34,11 +34,11 @@ class UpdateProfileRequestValidationTest {
     }
 
     private static UpdateProfileRequest requestWithLocation(BigDecimal lat, BigDecimal lng) {
-        return new UpdateProfileRequest("Nguyen Van A", null, null, null, "Quan 7", lat, lng, null);
+        return new UpdateProfileRequest("Nguyen Van A", null, null, null, "Quan 7", lat, lng, null, null, null, null);
     }
 
     private static UpdateProfileRequest requestWithRadius(Integer radiusKm) {
-        return new UpdateProfileRequest("Nguyen Van A", null, null, null, "Quan 7", null, null, radiusKm);
+        return new UpdateProfileRequest("Nguyen Van A", null, null, null, "Quan 7", null, null, radiusKm, null, null, null);
     }
 
     // UC03-12: toa do dung bien hop le, khong duoc bao loi.
@@ -76,7 +76,8 @@ class UpdateProfileRequestValidationTest {
     @Test
     void should_haveNoViolations_when_fieldsAreAtMaxAllowedLength() {
         UpdateProfileRequest request = new UpdateProfileRequest(
-                "N".repeat(150), "a".repeat(500), "d".repeat(500), "b".repeat(1000), "o".repeat(255), null, null, null);
+                "N".repeat(150), "a".repeat(500), "d".repeat(500), "b".repeat(1000), "o".repeat(255), null, null, null,
+                null, null, null);
 
         assertThat(validator.validate(request)).isEmpty();
     }
@@ -85,7 +86,7 @@ class UpdateProfileRequestValidationTest {
     @Test
     void should_haveViolation_when_fullNameExceedsMaxLengthByOne() {
         UpdateProfileRequest request = new UpdateProfileRequest(
-                "N".repeat(151), null, null, null, "Quan 7", null, null, null);
+                "N".repeat(151), null, null, null, "Quan 7", null, null, null, null, null, null);
 
         Set<ConstraintViolation<UpdateProfileRequest>> violations = validator.validate(request);
 
@@ -96,7 +97,7 @@ class UpdateProfileRequestValidationTest {
     @Test
     void should_haveViolation_when_operatingAreaExceedsMaxLengthByOne() {
         UpdateProfileRequest request = new UpdateProfileRequest(
-                "Nguyen Van A", null, null, null, "o".repeat(256), null, null, null);
+                "Nguyen Van A", null, null, null, "o".repeat(256), null, null, null, null, null, null);
 
         Set<ConstraintViolation<UpdateProfileRequest>> violations = validator.validate(request);
 

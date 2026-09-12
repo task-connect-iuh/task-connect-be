@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 import vn.taskconnect.task.api.TaskStatus;
 import vn.taskconnect.task.entity.Task;
+import vn.taskconnect.user.api.LocationType;
 
 /**
  * Phan hoi day du mot cong viec, dung chung cho POST /tasks, GET /tasks/mine, GET /tasks/{id}.
@@ -20,6 +21,8 @@ public record TaskResponse(
         String addressText,
         BigDecimal lat,
         BigDecimal lng,
+        LocationType locationType,
+        String arrivalNotes,
         Long budgetAmount,
         Instant scheduledAt,
         int estimatedWorkersNeeded,
@@ -33,7 +36,8 @@ public record TaskResponse(
     public static TaskResponse from(Task task, String categoryName, List<String> imageUrls) {
         return new TaskResponse(task.getId(), task.getPosterId(), task.getCategoryId(), categoryName,
                 task.getTitle(), task.getDescription(), task.getAddressText(), task.getLat(), task.getLng(),
-                task.getBudgetAmount(), task.getScheduledAt(), task.getEstimatedWorkersNeeded(), task.getStatus(),
-                imageUrls, task.getCreatedAt(), task.getUpdatedAt());
+                task.getLocationType(), task.getArrivalNotes(), task.getBudgetAmount(), task.getScheduledAt(),
+                task.getEstimatedWorkersNeeded(), task.getStatus(), imageUrls, task.getCreatedAt(),
+                task.getUpdatedAt());
     }
 }

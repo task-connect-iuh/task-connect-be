@@ -16,6 +16,11 @@ import vn.taskconnect.auth.api.AccountStatus;
  *                     16-api-contract.md, refresh token chi duoc truyen qua cookie
  *                     {@code httpOnly}. AuthController van doc duoc gia tri nay tu object
  *                     Java de dung Set-Cookie, chi khong lo ra JSON body.
+ * @param firstLogin   true CHI khi day la lan dau tien tai khoan nay tung dang nhap thanh
+ *                     cong (AuthService.issueTokens(), suy tu account.getLastLoginAt() == null
+ *                     TRUOC khi recordSuccessfulLogin() ghi de) - FE dung co nay dieu huong
+ *                     sang man xac minh so dien thoai dung 1 lan duy nhat. refresh() luon tra
+ *                     false, khong bao gio tinh la lan dang nhap dau tien.
  */
 public record TokenResponse(
         String accessToken,
@@ -24,6 +29,7 @@ public record TokenResponse(
         long expiresInSeconds,
         UUID accountId,
         AccountStatus status,
-        Set<AccountRole> roles
+        Set<AccountRole> roles,
+        boolean firstLogin
 ) {
 }

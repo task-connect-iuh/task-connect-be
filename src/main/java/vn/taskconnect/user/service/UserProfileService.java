@@ -15,14 +15,17 @@ import org.springframework.util.StringUtils;
 import vn.taskconnect.auth.api.AuthFacade;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
+import vn.taskconnect.user.api.LocationType;
 import vn.taskconnect.user.api.SkillVerificationStatus;
 import vn.taskconnect.user.dto.request.UpdateProfileRequest;
 import vn.taskconnect.user.dto.response.AvailabilitySlotResponse;
 import vn.taskconnect.user.dto.response.PublicProfileResponse;
 import vn.taskconnect.user.dto.response.PublicVerifiedSkillResponse;
+import vn.taskconnect.user.entity.PosterJobCategory;
 import vn.taskconnect.user.entity.ServiceCategory;
 import vn.taskconnect.user.entity.TaskerSkillProfile;
 import vn.taskconnect.user.entity.UserProfile;
+import vn.taskconnect.user.repository.PosterJobCategoryRepository;
 import vn.taskconnect.user.repository.ServiceCategoryRepository;
 import vn.taskconnect.user.repository.TaskerAvailabilityRepository;
 import vn.taskconnect.user.repository.TaskerSkillProfileRepository;
@@ -40,16 +43,19 @@ public class UserProfileService {
     private final TaskerSkillProfileRepository skillRepository;
     private final ServiceCategoryRepository categoryRepository;
     private final TaskerAvailabilityRepository availabilityRepository;
+    private final PosterJobCategoryRepository posterJobCategoryRepository;
     private final AuthFacade authFacade;
     private final Clock clock;
 
     public UserProfileService(UserProfileRepository profileRepository,
             TaskerSkillProfileRepository skillRepository, ServiceCategoryRepository categoryRepository,
-            TaskerAvailabilityRepository availabilityRepository, AuthFacade authFacade, Clock clock) {
+            TaskerAvailabilityRepository availabilityRepository,
+            PosterJobCategoryRepository posterJobCategoryRepository, AuthFacade authFacade, Clock clock) {
         this.profileRepository = profileRepository;
         this.skillRepository = skillRepository;
         this.categoryRepository = categoryRepository;
         this.availabilityRepository = availabilityRepository;
+        this.posterJobCategoryRepository = posterJobCategoryRepository;
         this.authFacade = authFacade;
         this.clock = clock;
     }
@@ -63,6 +69,17 @@ public class UserProfileService {
     public UserProfile getMyProfile(UUID accountId) {
         return profileRepository.findByAccountId(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROFILE_NOT_FOUND));
+    }
+
+    /**
+     * Danh sach id nhom dich vu Poster da khai la thuong thue, dung de ghep vao
+     * ProfileResponse.jobCategoryIds - doc rong neu chua tung khai bao.
+     */
+    @Transactional(readOnly = true)
+    public List<UUID> getMyJobCategoryIds(UUID accountId) {
+        return posterJobCategoryRepository.findByAccountIdOrderByCreatedAtAsc(accountId).stream()
+                .map(PosterJobCategory::getCategoryId)
+                .toList();
     }
 
     /**
@@ -119,6 +136,7 @@ public class UserProfileService {
     @Transactional
     public UserProfile upsertProfile(UUID accountId, UpdateProfileRequest request) {
         Instant now = clock.instant();
+        replaceJobCategoriesIfPresent(accountId, request.jobCategoryIds(), now);
         UserProfile existing = profileRepository.findByAccountId(accountId).orElse(null);
         if (existing != null) {
             return applyPartialUpdate(existing, request, now);
@@ -128,7 +146,8 @@ public class UserProfileService {
         String operatingArea = requireOnFirstCreate(request.operatingArea(), ErrorCode.MISSING_OPERATING_AREA);
         UserProfile profile = new UserProfile(UUID.randomUUID(), accountId, fullName, operatingArea, now);
         profile.updateDetails(fullName, request.avatarUrl(), request.addressText(), request.bio(), operatingArea,
-                request.locationLat(), request.locationLng(), request.preferredRadiusKm(), now);
+                request.locationLat(), request.locationLng(), request.preferredRadiusKm(), request.locationType(),
+                request.arrivalNotes(), now);
         try {
             return profileRepository.saveAndFlush(profile);
         } catch (DataIntegrityViolationException ex) {
@@ -136,6 +155,34 @@ public class UserProfileService {
                     .orElseThrow(() -> ex);
             return applyPartialUpdate(racedProfile, request, now);
         }
+    }
+
+    /**
+     * Neu jobCategoryIds co mat trong request (khac null), thay the toan bo danh sach nhom
+     * dich vu Poster da khai bang danh sach moi - danh sach rong [] la cach xoa het lua
+     * chon cu, khac voi null (khong doi). Validate moi id ton tai trong user_service_categories
+     * truoc khi ghi, nem INVALID_JOB_CATEGORY neu co id la.
+     *
+     * <p>flush() ngay sau deleteByAccountId la bat buoc: deleteByAccountId chi queue lenh
+     * DELETE trong persistence context (khong chay SQL ngay), va Hibernate mac dinh flush
+     * INSERT truoc DELETE khi commit - neu khong flush som, insert lai mot category cu (vi
+     * du giu nguyen 1 phan danh sach) se dung UNIQUE KEY
+     * uq_user_poster_job_categories_account_category voi chinh dong sap bi xoa.
+     */
+    private void replaceJobCategoriesIfPresent(UUID accountId, List<UUID> jobCategoryIds, Instant now) {
+        if (jobCategoryIds == null) {
+            return;
+        }
+        List<UUID> distinctIds = jobCategoryIds.stream().distinct().toList();
+        if (!distinctIds.isEmpty() && categoryRepository.findAllById(distinctIds).size() != distinctIds.size()) {
+            throw new BusinessException(ErrorCode.INVALID_JOB_CATEGORY);
+        }
+        posterJobCategoryRepository.deleteByAccountId(accountId);
+        posterJobCategoryRepository.flush();
+        List<PosterJobCategory> rows = distinctIds.stream()
+                .map(categoryId -> new PosterJobCategory(UUID.randomUUID(), accountId, categoryId, now))
+                .toList();
+        posterJobCategoryRepository.saveAll(rows);
     }
 
     /**
@@ -153,6 +200,8 @@ public class UserProfileService {
         BigDecimal locationLat = request.locationLat() != null ? request.locationLat() : profile.getLocationLat();
         BigDecimal locationLng = request.locationLng() != null ? request.locationLng() : profile.getLocationLng();
         Integer preferredRadiusKm = request.preferredRadiusKm() != null ? request.preferredRadiusKm() : profile.getPreferredRadiusKm();
+        LocationType locationType = request.locationType() != null ? request.locationType() : profile.getLocationType();
+        String arrivalNotes = request.arrivalNotes() != null ? request.arrivalNotes() : profile.getArrivalNotes();
 
         if (Objects.equals(fullName, profile.getFullName()) && Objects.equals(avatarUrl, profile.getAvatarUrl())
                 && Objects.equals(addressText, profile.getAddressText())
@@ -160,12 +209,14 @@ public class UserProfileService {
                 && Objects.equals(operatingArea, profile.getOperatingArea())
                 && isSameNumericValue(locationLat, profile.getLocationLat())
                 && isSameNumericValue(locationLng, profile.getLocationLng())
-                && Objects.equals(preferredRadiusKm, profile.getPreferredRadiusKm())) {
+                && Objects.equals(preferredRadiusKm, profile.getPreferredRadiusKm())
+                && Objects.equals(locationType, profile.getLocationType())
+                && Objects.equals(arrivalNotes, profile.getArrivalNotes())) {
             return profile;
         }
 
         profile.updateDetails(fullName, avatarUrl, addressText, bio, operatingArea, locationLat, locationLng,
-                preferredRadiusKm, now);
+                preferredRadiusKm, locationType, arrivalNotes, now);
         return profileRepository.save(profile);
     }
 

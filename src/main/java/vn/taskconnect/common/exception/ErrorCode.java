@@ -94,6 +94,12 @@ public enum ErrorCode {
             "Mã xác minh đã hết hạn. Bạn có thể yêu cầu mã mới."),
     TOO_MANY_EMAIL_CHANGE_OTP_ATTEMPTS("AUTH-429-TOO_MANY_EMAIL_CHANGE_OTP_ATTEMPTS", HttpStatus.TOO_MANY_REQUESTS,
             "Bạn đã nhập sai mã quá nhiều lần. Vui lòng bắt đầu lại từ đầu."),
+    INVALID_FIREBASE_TOKEN("AUTH-401-INVALID_FIREBASE_TOKEN", HttpStatus.UNAUTHORIZED,
+            "Không xác thực được số điện thoại. Vui lòng thử lại."),
+    PHONE_VERIFICATION_MISMATCH("AUTH-400-PHONE_VERIFICATION_MISMATCH", HttpStatus.BAD_REQUEST,
+            "Số điện thoại không khớp với mã xác minh. Vui lòng thử lại."),
+    OLD_PHONE_NOT_VERIFIED("AUTH-409-OLD_PHONE_NOT_VERIFIED", HttpStatus.CONFLICT,
+            "Bạn cần xác minh số điện thoại hiện tại trước khi đổi sang số mới."),
 
     // --- USR ---
     MISSING_OPERATING_AREA("USR-400-MISSING_OPERATING_AREA", HttpStatus.BAD_REQUEST,
@@ -102,6 +108,8 @@ public enum ErrorCode {
             "Chưa có hồ sơ cá nhân nào được tạo cho tài khoản này."),
     MISSING_FULL_NAME("USR-400-MISSING_FULL_NAME", HttpStatus.BAD_REQUEST,
             "Bạn chưa khai báo họ tên."),
+    INVALID_JOB_CATEGORY("USR-400-INVALID_JOB_CATEGORY", HttpStatus.BAD_REQUEST,
+            "Nhóm dịch vụ đã chọn không hợp lệ."),
     UNSUPPORTED_AVATAR_TYPE("USR-400-UNSUPPORTED_AVATAR_TYPE", HttpStatus.BAD_REQUEST,
             "Định dạng ảnh không được hỗ trợ. Chỉ chấp nhận JPEG, PNG hoặc WEBP."),
     UNSUPPORTED_KYC_IMAGE_TYPE("USR-400-UNSUPPORTED_KYC_IMAGE_TYPE", HttpStatus.BAD_REQUEST,
@@ -140,6 +148,8 @@ public enum ErrorCode {
             "Không tìm thấy khung giờ rảnh này."),
     AVAILABILITY_SLOT_OVERLAP("USR-409-AVAILABILITY_SLOT_OVERLAP", HttpStatus.CONFLICT,
             "Khung giờ này trùng với một khung giờ rảnh khác đã khai báo trong cùng ngày."),
+    SAVED_ADDRESS_NOT_FOUND("USR-404-SAVED_ADDRESS_NOT_FOUND", HttpStatus.NOT_FOUND,
+            "Không tìm thấy địa chỉ đã lưu này."),
 
     // --- TSK ---
     MISSING_LOCATION("TSK-400-MISSING_LOCATION", HttpStatus.BAD_REQUEST,

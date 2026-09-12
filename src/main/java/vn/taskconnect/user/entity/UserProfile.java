@@ -12,6 +12,7 @@ import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import vn.taskconnect.user.api.KycStatus;
+import vn.taskconnect.user.api.LocationType;
 
 /**
  * Ho so ca nhan cua mot tai khoan. Xem V2__create_user_tables.sql. Diem uy tin KHONG
@@ -57,6 +58,18 @@ public class UserProfile {
     @Column(name = "preferred_radius_km")
     private Integer preferredRadiusKm;
 
+    // Loai dia diem noi cong viec dien ra, Task Poster tu khai bao - null neu chua khai
+    // bao hoac tai khoan dang dung o vai tro Tasker. Xem
+    // V22__add_poster_fields_to_user_profiles.sql.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "location_type", length = 20)
+    private LocationType locationType;
+
+    // Luu y cho Tasker khi toi nha Poster (vd "co bao ve, dang ky ten o sanh") - null neu
+    // chua khai bao. Xem V22__add_poster_fields_to_user_profiles.sql.
+    @Column(name = "arrival_notes", length = 500)
+    private String arrivalNotes;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "kyc_status", nullable = false, length = 20)
     private KycStatus kycStatus;
@@ -92,7 +105,7 @@ public class UserProfile {
      */
     public void updateDetails(String fullName, String avatarUrl, String addressText, String bio,
             String operatingArea, BigDecimal locationLat, BigDecimal locationLng, Integer preferredRadiusKm,
-            Instant now) {
+            LocationType locationType, String arrivalNotes, Instant now) {
         this.fullName = fullName;
         this.avatarUrl = avatarUrl;
         this.addressText = addressText;
@@ -101,6 +114,8 @@ public class UserProfile {
         this.locationLat = locationLat;
         this.locationLng = locationLng;
         this.preferredRadiusKm = preferredRadiusKm;
+        this.locationType = locationType;
+        this.arrivalNotes = arrivalNotes;
         this.updatedAt = now;
     }
 
@@ -160,6 +175,16 @@ public class UserProfile {
     /** Ban kinh lam viec uu tien (km) Tasker tu khai bao, null neu chua khai bao. */
     public Integer getPreferredRadiusKm() {
         return preferredRadiusKm;
+    }
+
+    /** Loai dia diem noi cong viec dien ra Poster tu khai, null neu chua khai bao. */
+    public LocationType getLocationType() {
+        return locationType;
+    }
+
+    /** Luu y cho Tasker khi toi nha Poster, null neu chua khai bao. */
+    public String getArrivalNotes() {
+        return arrivalNotes;
     }
 
     /** Trang thai KYC hien tai, dong bo tu module KYC (Buoc 4) khi duoc duyet/tu choi. */

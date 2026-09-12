@@ -47,7 +47,8 @@ public class UserProfileController {
     @PreAuthorize("isAuthenticated()")
     public ApiResponse<ProfileResponse> getMyProfile(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
         ProfileResponse response = ProfileResponse.from(profileService.getMyProfile(principal.accountId()),
-                authFacade.findAccount(principal.accountId()).orElse(null));
+                authFacade.findAccount(principal.accountId()).orElse(null),
+                profileService.getMyJobCategoryIds(principal.accountId()));
         return ApiResponse.ok(response);
     }
 
@@ -60,7 +61,8 @@ public class UserProfileController {
     public ApiResponse<ProfileResponse> updateMyProfile(@AuthenticationPrincipal AuthenticatedPrincipal principal,
             @Valid @RequestBody UpdateProfileRequest request) {
         ProfileResponse response = ProfileResponse.from(profileService.upsertProfile(principal.accountId(), request),
-                authFacade.findAccount(principal.accountId()).orElse(null));
+                authFacade.findAccount(principal.accountId()).orElse(null),
+                profileService.getMyJobCategoryIds(principal.accountId()));
         return ApiResponse.ok(response, "Cập nhật hồ sơ thành công.");
     }
 
