@@ -114,6 +114,12 @@ app:
     # BAT BUOC set qua bien moi truong, khong dat default - GoogleIdTokenVerifier dung gia
     # tri nay lam audience, thieu se cho phep token cua bat ky client Google nao khac.
     client-id: ${GOOGLE_CLIENT_ID}
+  firebase:
+    # Xac minh so dien thoai (Firebase Phone Auth, test-number whitelist luc demo). BAT BUOC
+    # set qua bien moi truong, khong dat default - FirebaseTokenVerifierService dung 2 gia
+    # tri nay de khoi tao Admin SDK va kiem tra token dung phat cho dung Firebase project.
+    project-id: ${FIREBASE_PROJECT_ID}
+    service-account-json-base64: ${FIREBASE_SERVICE_ACCOUNT_JSON_BASE64}
 
   crypto:
     # Bat buoc set qua bien moi truong. Khac JWT_SECRET (chi ky, xoay vong duoc), khoa nay

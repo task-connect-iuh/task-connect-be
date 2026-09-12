@@ -22,6 +22,7 @@ import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.user.dto.request.UpdateProfileRequest;
 import vn.taskconnect.user.entity.UserProfile;
+import vn.taskconnect.user.repository.PosterJobCategoryRepository;
 import vn.taskconnect.user.repository.ServiceCategoryRepository;
 import vn.taskconnect.user.repository.TaskerAvailabilityRepository;
 import vn.taskconnect.user.repository.TaskerSkillProfileRepository;
@@ -43,10 +44,12 @@ class UserProfileServiceTest {
     private final TaskerSkillProfileRepository skillRepository = mock(TaskerSkillProfileRepository.class);
     private final ServiceCategoryRepository categoryRepository = mock(ServiceCategoryRepository.class);
     private final TaskerAvailabilityRepository availabilityRepository = mock(TaskerAvailabilityRepository.class);
+    private final PosterJobCategoryRepository posterJobCategoryRepository = mock(PosterJobCategoryRepository.class);
     private final AuthFacade authFacade = mock(AuthFacade.class);
     private final Clock clock = Clock.fixed(FIXED_NOW, ZoneOffset.UTC);
     private final UserProfileService service = new UserProfileService(
-            repository, skillRepository, categoryRepository, availabilityRepository, authFacade, clock);
+            repository, skillRepository, categoryRepository, availabilityRepository, posterJobCategoryRepository,
+            authFacade, clock);
 
     private static UpdateProfileRequest requestOf(String fullName, String avatarUrl, String addressText, String bio,
             String operatingArea, BigDecimal lat, BigDecimal lng) {
@@ -55,7 +58,8 @@ class UserProfileServiceTest {
 
     private static UpdateProfileRequest requestOf(String fullName, String avatarUrl, String addressText, String bio,
             String operatingArea, BigDecimal lat, BigDecimal lng, Integer preferredRadiusKm) {
-        return new UpdateProfileRequest(fullName, avatarUrl, addressText, bio, operatingArea, lat, lng, preferredRadiusKm);
+        return new UpdateProfileRequest(fullName, avatarUrl, addressText, bio, operatingArea, lat, lng,
+                preferredRadiusKm, null, null, null);
     }
 
     // UC03-01: PATCH lan dau, du truong bat buoc -> tao moi ho so.
@@ -107,7 +111,7 @@ class UserProfileServiceTest {
         UserProfile existing = new UserProfile(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", "Quan 7",
                 FIXED_NOW.minusSeconds(3600));
         existing.updateDetails("Nguyen Van A", "old-avatar.png", "123 Le Loi", null, "Quan 7",
-                BigDecimal.valueOf(10.75), BigDecimal.valueOf(106.66), null, FIXED_NOW.minusSeconds(3600));
+                BigDecimal.valueOf(10.75), BigDecimal.valueOf(106.66), null, null, null, FIXED_NOW.minusSeconds(3600));
         when(repository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(existing));
         when(repository.save(any(UserProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -145,7 +149,7 @@ class UserProfileServiceTest {
         UserProfile existing = new UserProfile(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", "Quan 7",
                 originalUpdatedAt);
         existing.updateDetails("Nguyen Van A", "avatar.png", "123 Le Loi", null, "Quan 7",
-                BigDecimal.valueOf(10.75), BigDecimal.valueOf(106.66), null, originalUpdatedAt);
+                BigDecimal.valueOf(10.75), BigDecimal.valueOf(106.66), null, null, null, originalUpdatedAt);
         when(repository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(existing));
 
         UpdateProfileRequest emptyRequest = requestOf(null, null, null, null, null, null, null);

@@ -11,7 +11,6 @@ import vn.taskconnect.auth.api.AccountRole;
 public record RegisterRequest(
         @NotBlank @Size(max = 150) String fullName,
         @NotBlank @Email String email,
-        String phone,
         @NotBlank
         @Size(min = 8, max = 100)
         @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).+$",

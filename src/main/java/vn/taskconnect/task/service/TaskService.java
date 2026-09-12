@@ -74,8 +74,8 @@ public class TaskService {
         int estimatedWorkersNeeded = request.estimatedWorkersNeeded() != null
                 ? request.estimatedWorkersNeeded() : DEFAULT_ESTIMATED_WORKERS_NEEDED;
         Task task = Task.createOpen(UUID.randomUUID(), posterId, request.categoryId(), request.title(),
-                request.description(), request.addressText(), request.lat(), request.lng(), request.budgetAmount(),
-                request.scheduledAt(), estimatedWorkersNeeded, now);
+                request.description(), request.addressText(), request.lat(), request.lng(), request.locationType(),
+                request.arrivalNotes(), request.budgetAmount(), request.scheduledAt(), estimatedWorkersNeeded, now);
         taskRepository.save(task);
 
         List<TaskImage> savedImages = saveImages(task.getId(), imageUrls);

@@ -33,6 +33,7 @@ import vn.taskconnect.auth.repository.AuthRefreshTokenRepository;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.security.AdminProperties;
+import vn.taskconnect.security.firebase.FirebaseTokenVerifierService;
 import vn.taskconnect.security.google.GoogleProfile;
 import vn.taskconnect.security.google.GoogleTokenVerifierService;
 import vn.taskconnect.security.jwt.JwtProperties;
@@ -70,6 +71,7 @@ class AuthServiceGoogleLoginTest {
             mock(PasswordEncoder.class),
             tokenProvider,
             googleTokenVerifier,
+            mock(FirebaseTokenVerifierService.class),
             new JwtProperties("test-secret", 15, 15, false),
             new AdminProperties(SUPER_ADMIN_EMAIL),
             userFacade,

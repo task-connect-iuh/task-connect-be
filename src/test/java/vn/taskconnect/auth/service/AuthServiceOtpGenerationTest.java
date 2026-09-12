@@ -16,6 +16,7 @@ import vn.taskconnect.auth.repository.AuthEmailVerificationTokenRepository;
 import vn.taskconnect.auth.repository.AuthPasswordResetTokenRepository;
 import vn.taskconnect.auth.repository.AuthRefreshTokenRepository;
 import vn.taskconnect.security.AdminProperties;
+import vn.taskconnect.security.firebase.FirebaseTokenVerifierService;
 import vn.taskconnect.security.google.GoogleTokenVerifierService;
 import vn.taskconnect.security.jwt.JwtProperties;
 import vn.taskconnect.security.jwt.JwtTokenProvider;
@@ -39,6 +40,7 @@ class AuthServiceOtpGenerationTest {
                 mock(PasswordEncoder.class),
                 mock(JwtTokenProvider.class),
                 mock(GoogleTokenVerifierService.class),
+                mock(FirebaseTokenVerifierService.class),
                 new JwtProperties("test-secret", 15, 15, false),
                 new AdminProperties("admin@taskconnect.vn"),
                 mock(UserFacade.class),

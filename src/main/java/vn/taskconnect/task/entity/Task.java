@@ -12,14 +12,18 @@ import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import vn.taskconnect.task.api.TaskStatus;
+import vn.taskconnect.user.api.LocationType;
 
 /**
  * Mot cong viec do Task Poster dang. Xem V18__create_task_tables.sql. Dot 1 (dang viec toi
  * gian) chi ho tro tao va doc - khong co method chuyen trang thai nao khac ngoai createOpen()
  * (sua/huy UC07, giao viec UC11 se them method rieng, theo dung mau
- * KycVerification.approve()/reject() khi lam dot do). addressText/lat/lng la dia diem CAN
- * THUC HIEN cong viec, hoan toan doc lap voi addressText/locationLat/locationLng cua
- * user_profiles - khong tham chieu qua lai.
+ * KycVerification.approve()/reject() khi lam dot do). addressText/lat/lng/locationType/
+ * arrivalNotes la thong tin noi CAN THUC HIEN cong viec, hoan toan doc lap voi cac truong
+ * cung ten cua user_profiles - FE dien san tu ho so luc mo form dang viec (xem V24) nhung
+ * khong tham chieu qua lai sau do. LocationType tai su dung enum cua module User qua goi
+ * api/ (xem .claude/rules/00-architecture.md), khong dinh nghia enum rieng vi cung mot khai
+ * niem nghiep vu.
  */
 @Entity
 @Table(name = "task_tasks")
@@ -53,6 +57,13 @@ public class Task {
     @Column(name = "lng", nullable = false, precision = 10, scale = 7)
     private BigDecimal lng;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "location_type", length = 20)
+    private LocationType locationType;
+
+    @Column(name = "arrival_notes", length = 500)
+    private String arrivalNotes;
+
     @JdbcTypeCode(SqlTypes.BIGINT)
     @Column(name = "budget_amount")
     private Long budgetAmount;
@@ -84,8 +95,8 @@ public class Task {
     }
 
     private Task(UUID id, UUID posterId, UUID categoryId, String title, String description, String addressText,
-            BigDecimal lat, BigDecimal lng, Long budgetAmount, Instant scheduledAt, int estimatedWorkersNeeded,
-            TaskStatus status, Instant now) {
+            BigDecimal lat, BigDecimal lng, LocationType locationType, String arrivalNotes, Long budgetAmount,
+            Instant scheduledAt, int estimatedWorkersNeeded, TaskStatus status, Instant now) {
         this.id = id;
         this.posterId = posterId;
         this.categoryId = categoryId;
@@ -94,6 +105,8 @@ public class Task {
         this.addressText = addressText;
         this.lat = lat;
         this.lng = lng;
+        this.locationType = locationType;
+        this.arrivalNotes = arrivalNotes;
         this.budgetAmount = budgetAmount;
         this.scheduledAt = scheduledAt;
         this.estimatedWorkersNeeded = estimatedWorkersNeeded;
@@ -110,10 +123,10 @@ public class Task {
      * lai constructor nay, giu factory method nay dung nghia "tao va mo cong khai ngay".
      */
     public static Task createOpen(UUID id, UUID posterId, UUID categoryId, String title, String description,
-            String addressText, BigDecimal lat, BigDecimal lng, Long budgetAmount, Instant scheduledAt,
-            int estimatedWorkersNeeded, Instant now) {
-        return new Task(id, posterId, categoryId, title, description, addressText, lat, lng, budgetAmount,
-                scheduledAt, estimatedWorkersNeeded, TaskStatus.OPEN, now);
+            String addressText, BigDecimal lat, BigDecimal lng, LocationType locationType, String arrivalNotes,
+            Long budgetAmount, Instant scheduledAt, int estimatedWorkersNeeded, Instant now) {
+        return new Task(id, posterId, categoryId, title, description, addressText, lat, lng, locationType,
+                arrivalNotes, budgetAmount, scheduledAt, estimatedWorkersNeeded, TaskStatus.OPEN, now);
     }
 
     /**
@@ -165,6 +178,16 @@ public class Task {
     /** Kinh do noi can thuc hien cong viec. */
     public BigDecimal getLng() {
         return lng;
+    }
+
+    /** Loai dia diem noi can thuc hien cong viec, null neu khong khai bao. */
+    public LocationType getLocationType() {
+        return locationType;
+    }
+
+    /** Luu y cho Tasker khi toi noi lam viec, null neu khong khai bao. */
+    public String getArrivalNotes() {
+        return arrivalNotes;
     }
 
     /** Ngan sach du kien (don vi dong), null nghia la "thoa thuan" - tuy chon, khong bat buoc. */
