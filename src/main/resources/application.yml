@@ -127,6 +127,50 @@ app:
     # cu, nen KHONG duoc de trong o bat ky moi truong nao. Sinh khoa moi: openssl rand -base64 32
     key: ${APP_CRYPTO_KEY}
 
+ai:
+  embedding:
+    provider: gemini
+    # Bat buoc set qua bien moi truong, khong dat default (giong JWT_SECRET/DB_PASSWORD) -
+    # khoa nay goi API tra phi/co quota that ra ngoai, khong duoc chay bang gia tri rong
+    # hoac hardcode trong repo.
+    api-key: ${GEMINI_API_KEY}
+    model: gemini-embedding-001
+    daily-quota: ${AI_EMBEDDING_DAILY_QUOTA:1000}
+  llm:
+    provider: groq
+    # Cung ly do voi ai.embedding.api-key o tren - khong dat default.
+    api-key: ${GROQ_API_KEY}
+    # llama-3.3-70b-versatile RIENG bi Groq go khoi API that (404 model_not_found xac nhan
+    # 2026-09-14), va doi llama-3.1-8b-instant cung khong con nua - goi GET
+    # api.groq.com/openai/v1/models bang key that cho thay TOAN BO dong Llama thô da bi go
+    # khoi catalog tai khoan nay, chi con GPT-OSS (OpenAI open-weight) va Qwen. Doi sang
+    # openai/gpt-oss-120b (131K context, ho tro json_mode + structured_outputs + reasoning,
+    # chat luong cao nhat trong danh sach con hoat dong). Doi qua bien moi truong GROQ_MODEL
+    # neu Groq lai doi/go model lan nua, khong can sua code - kiem tra danh sach that bang
+    # chinh lenh GET models o tren, KHONG dua vao docs cong khai (co the chua cap nhat kip).
+    model: ${GROQ_MODEL:openai/gpt-oss-120b}
+    # Free tier gpt-oss-120b: 1.000 request/ngay NHUNG chi 200.000 token/ngay - gioi han that
+    # su bop nghet la TPD chu khong phai RPD. Moi lan goi ~1.500-2.500 token (10 ho so Tasker +
+    # mo ta Task), nen tran token that cho phep ~80-130 lan goi/ngay, khong phai 900.
+    # QuotaTrackerService dem theo SO REQUEST (khong dem token), nen ha nguong xuong 80 de
+    # chan truoc khi cham TPD that, chua margin an toan. Tang lai neu do luong thay prompt
+    # thuc te ngan hon uoc tinh.
+    daily-quota: ${AI_LLM_DAILY_QUOTA:80}
+
+matching:
+  weights:
+    # Trong so xep hang cau truc (structuredScore), tong = 1.0 - xem
+    # task-connect-claude/docs plan "Tasker goi y" da duyet. Cau hinh duoc de de chinh sau
+    # khi co du lieu that, khong hardcode trong Java.
+    distance: 0.35
+    price: 0.25
+    experience: 0.15
+    availability: 0.25
+    # Trong so tron semanticScore vao finalScore: finalScore = (1 - semantic) * structuredScore
+    # + semantic * semanticScore.
+    semantic: 0.30
+  low-confidence-threshold: ${MATCHING_LOW_CONFIDENCE_THRESHOLD:50}
+
 aws:
   s3:
     # Bat buoc set qua bien moi truong, khong dat default: sai bucket/khoa se upload

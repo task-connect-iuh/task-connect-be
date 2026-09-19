@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import vn.taskconnect.notification.api.NotificationFacade;
 import vn.taskconnect.notification.api.dto.EmailChangedNotice;
 import vn.taskconnect.notification.api.dto.EmailOtpMessage;
+import vn.taskconnect.notification.api.dto.TaskerInviteNotice;
 import vn.taskconnect.notification.infrastructure.EmailDeliveryException;
 import vn.taskconnect.notification.infrastructure.EmailOtpTemplate;
 import vn.taskconnect.notification.infrastructure.EmailSender;
@@ -90,6 +91,17 @@ class NotificationFacadeImpl implements NotificationFacade {
                     template.emailChangedWelcomeBody());
         } catch (EmailDeliveryException | MailException ex) {
             log.error("Gui thong bao doi email (toi dia chi moi) that bai cho account {}: {}",
+                    notice.accountId(), ex.getMessage(), ex);
+        }
+    }
+
+    @Override
+    public void notifyTaskerInvited(TaskerInviteNotice notice) {
+        try {
+            emailSender.send(notice.recipientEmail(), template.taskerInvitedSubject(),
+                    template.taskerInvitedBody(notice.taskTitle()));
+        } catch (EmailDeliveryException | MailException ex) {
+            log.error("Gui thong bao moi lam viec that bai cho account {}: {}",
                     notice.accountId(), ex.getMessage(), ex);
         }
     }

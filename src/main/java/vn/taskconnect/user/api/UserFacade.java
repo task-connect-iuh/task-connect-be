@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import vn.taskconnect.user.api.dto.ServiceCategorySummary;
+import vn.taskconnect.user.api.dto.TaskerMatchCandidateSummary;
 import vn.taskconnect.user.api.dto.UserProfileSummary;
 
 /**
@@ -31,4 +32,13 @@ public interface UserFacade {
      * (khong ghi de len du lieu da ton tai).
      */
     void createInitialProfile(UUID accountId, String fullName);
+
+    /**
+     * Danh sach Tasker co ho so ky nang cho dung mot category, dung boi module Matching
+     * (goi y Tasker) de loc/tinh diem cau truc - xem TaskerMatchCandidateSummary. Tra ve MOI
+     * trang thai xac minh (khong tu loc VERIFIED o day) de Matching tu quyet dinh dieu kien
+     * loc cua minh, dong nhat voi nguyen tac facade chi anh xa du lieu, khong ap logic
+     * nghiep vu cua module goi.
+     */
+    List<TaskerMatchCandidateSummary> findMatchCandidates(UUID categoryId);
 }
