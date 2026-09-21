@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import vn.taskconnect.task.api.TaskAiFlagReason;
 import vn.taskconnect.task.api.TaskStatus;
 import vn.taskconnect.user.api.LocationType;
 
@@ -84,6 +85,23 @@ public class Task {
     @Column(name = "status", nullable = false, length = 20)
     private TaskStatus status;
 
+    @Column(name = "needs_admin_review", nullable = false)
+    private boolean needsAdminReview;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "ai_flag_reason", length = 30)
+    private TaskAiFlagReason aiFlagReason;
+
+    @JdbcTypeCode(SqlTypes.BINARY)
+    @Column(name = "reviewed_by_admin_id", columnDefinition = "BINARY(16)")
+    private UUID reviewedByAdminId;
+
+    @Column(name = "reviewed_at")
+    private Instant reviewedAt;
+
+    @Column(name = "rejection_reason", length = 500)
+    private String rejectionReason;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -137,6 +155,48 @@ public class Task {
      */
     public void assignTo(Instant now) {
         this.status = TaskStatus.ASSIGNED;
+        this.updatedAt = now;
+    }
+
+    /**
+     * Ghi lai ket qua AI phan loai noi dung luc dang viec (chuc nang kiem duyet luc submit,
+     * xem .claude/rules/15-ai-module.md) va gan co hau kiem cho Admin neu can. Khong con so
+     * sanh voi danh muc AI de xuat - Poster tu chon danh muc hoan toan tu do, AI chi con
+     * nhiem vu phat hien OTHER (ngoai 5 nhom dich vu) va SUSPICIOUS (vi pham). KHONG doi
+     * status - task da OPEN tu createOpen() va luon giu OPEN du ket qua AI la gi, day la
+     * quyet dinh hau kiem hoan toan da chot (khong tien kiem, khong chan luong dang viec vi
+     * AI loi hay AI nghi ngo). Goi ngay sau createOpen(), truoc khi luu - tach rieng khoi
+     * constructor dung theo huong dan da ghi san o Javadoc createOpen().
+     */
+    public void applyAiClassification(boolean needsAdminReview, TaskAiFlagReason aiFlagReason) {
+        this.needsAdminReview = needsAdminReview;
+        this.aiFlagReason = aiFlagReason;
+    }
+
+    /**
+     * Admin xac nhan cong viec dang hau kiem la KHONG vi pham that (AI bao dong nham) - chi go
+     * co needs_admin_review, KHONG doi status hay aiFlagReason (giu lai lam lich su tai sao
+     * tung bi gan co, phuc vu doi chieu sau nay neu can).
+     */
+    public void resolveReview(UUID adminId, Instant now) {
+        this.needsAdminReview = false;
+        this.reviewedByAdminId = adminId;
+        this.reviewedAt = now;
+        this.updatedAt = now;
+    }
+
+    /**
+     * Admin tu choi mot cong viec dang hau kiem, bat buoc kem ly do - chuyen sang REJECTED
+     * (nhanh thoat da co san trong state machine, xem .claude/rules/01-domain-glossary.md).
+     * Dieu kien status hien tai phai la OPEN kiem tra o TaskService, khong validate lai trong
+     * entity (cung convention voi KycVerification.reject()).
+     */
+    public void rejectByAdmin(UUID adminId, String rejectionReason, Instant now) {
+        this.status = TaskStatus.REJECTED;
+        this.needsAdminReview = false;
+        this.rejectionReason = rejectionReason;
+        this.reviewedByAdminId = adminId;
+        this.reviewedAt = now;
         this.updatedAt = now;
     }
 
@@ -208,6 +268,31 @@ public class Task {
     /** Trang thai hien tai trong vong doi cong viec. */
     public TaskStatus getStatus() {
         return status;
+    }
+
+    /** Co dang cho Admin hau kiem hay khong - CHI Admin thay, khong hien thi cho Poster. */
+    public boolean isNeedsAdminReview() {
+        return needsAdminReview;
+    }
+
+    /** Ly do gan co hau kiem, null neu needsAdminReview = false. */
+    public TaskAiFlagReason getAiFlagReason() {
+        return aiFlagReason;
+    }
+
+    /** Id tai khoan Admin da xu ly (xac nhan hoac tu choi) hau kiem gan nhat, null neu chua tung xu ly. */
+    public UUID getReviewedByAdminId() {
+        return reviewedByAdminId;
+    }
+
+    /** Thoi diem Admin xu ly hau kiem gan nhat, null neu chua tung xu ly. */
+    public Instant getReviewedAt() {
+        return reviewedAt;
+    }
+
+    /** Ly do Admin tu choi, null neu chua bi tu choi lan nao. */
+    public String getRejectionReason() {
+        return rejectionReason;
     }
 
     /** Thoi diem dang cong viec, khong doi sau do. */

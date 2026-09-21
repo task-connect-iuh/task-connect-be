@@ -3,6 +3,7 @@ package vn.taskconnect.ai.infrastructure;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
+import vn.taskconnect.ai.api.dto.CategoryClassificationRequest;
 import vn.taskconnect.ai.api.dto.SuggestionReasonRequest;
 
 /**
@@ -78,6 +79,54 @@ public class PromptTemplates {
         }
         sb.append("\nHay tra ve JSON array dung dinh dang da mo ta o tren, du cho tat ca ")
                 .append(candidates.size()).append(" ung vien.");
+        return sb.toString();
+    }
+
+    /**
+     * Dung prompt tieng Viet gui cho Groq de phan loai mo ta cong viec vao 1 trong cac danh
+     * muc ung vien, hoac xac dinh OTHER (khong khop danh muc nao) / SUSPICIOUS (khop mot tieu
+     * chi vi pham). candidates.contextText la kho tri thuc RAG duy nhat (lay tu
+     * user_service_categories.description/keywords - xem .claude/rules/15-ai-module.md), cam
+     * LLM tu bia them danh muc ngoai danh sach candidates.
+     */
+    public String buildCategoryClassificationPrompt(CategoryClassificationRequest request) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Ban la tro ly phan loai cong viec cua TaskConnect, nen tang ket noi Tasker ")
+                .append("(tho sua dien nuoc) voi Task Poster (nguoi thue). Nhiem vu: doc mo ta ")
+                .append("cong viec ben duoi, roi phan loai vao DUNG MOT trong ba truong hop sau.\n\n")
+                .append("QUY TAC BAT BUOC:\n")
+                .append("1. Kiem tra DANH SACH TIEU CHI VI PHAM TRUOC TIEN. Neu mo ta khop bat ky ")
+                .append("tieu chi nao trong do, tra ve outcome=\"SUSPICIOUS\", candidateId=null, ")
+                .append("confidence=0, suspiciousReason=ma cua tieu chi do (dung dung ma trong ")
+                .append("danh sach, khong bia them ma moi) - du cho co ve mo ta cung khop mot danh ")
+                .append("muc, tieu chi vi pham luon uu tien hon.\n")
+                .append("2. Neu khong khop tieu chi vi pham nao, kiem tra DANH SACH DANH MUC UNG ")
+                .append("VIEN. Neu khop ro mot danh muc, tra ve outcome=\"CATEGORY\", candidateId=id ")
+                .append("danh muc do (dung id trong danh sach, khong bia them), confidence=do tin ")
+                .append("cay 0-100, suspiciousReason=null.\n")
+                .append("3. Neu khong khop tieu chi vi pham nao va cung khong khop ro danh muc nao ")
+                .append("(vd viec ngoai pham vi dien-nuoc dan dung nhung khong co dau hieu vi pham), ")
+                .append("tra ve outcome=\"OTHER\", candidateId=null, confidence=0, ")
+                .append("suspiciousReason=null.\n")
+                .append("4. Tra ve DUY NHAT mot object JSON, khong kem giai thich, khong kem markdown ")
+                .append("code fence, khong kem van ban nao khac ngoai JSON. Dinh dang bat buoc: ")
+                .append("{\"outcome\": string, \"candidateId\": string hoac null, \"confidence\": ")
+                .append("number, \"suspiciousReason\": string hoac null}.\n\n")
+                .append("DANH SACH TIEU CHI VI PHAM (SUSPICIOUS):\n");
+        List<CategoryClassificationRequest.SuspiciousCriterion> criteria = request.suspiciousCriteria();
+        for (int i = 0; i < criteria.size(); i++) {
+            CategoryClassificationRequest.SuspiciousCriterion criterion = criteria.get(i);
+            sb.append(i + 1).append(". ma=\"").append(criterion.code()).append("\", mo ta=\"")
+                    .append(criterion.description()).append("\"\n");
+        }
+        sb.append("\nDANH SACH DANH MUC UNG VIEN:\n");
+        List<CategoryClassificationRequest.CandidateCategory> candidates = request.candidates();
+        for (int i = 0; i < candidates.size(); i++) {
+            CategoryClassificationRequest.CandidateCategory candidate = candidates.get(i);
+            sb.append(i + 1).append(". id=\"").append(candidate.candidateId()).append("\", ten=\"")
+                    .append(candidate.name()).append("\", mo ta=\"").append(candidate.contextText()).append("\"\n");
+        }
+        sb.append("\nMO TA CONG VIEC CAN PHAN LOAI:\n").append(request.description());
         return sb.toString();
     }
 }
