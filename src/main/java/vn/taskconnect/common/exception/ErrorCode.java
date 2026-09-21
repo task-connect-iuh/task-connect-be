@@ -180,6 +180,22 @@ public enum ErrorCode {
     // --- MATCH ---
     NO_TASKER_FOUND("MATCH-404-NO_TASKER_FOUND", HttpStatus.NOT_FOUND,
             "Chưa tìm được Tasker phù hợp."),
+    ALREADY_INVITED("MATCH-409-ALREADY_INVITED", HttpStatus.CONFLICT,
+            "Tasker này đã được mời cho công việc này rồi."),
+    INVITE_NOT_FOUND("MATCH-404-INVITE_NOT_FOUND", HttpStatus.NOT_FOUND,
+            "Không tìm thấy lời mời này."),
+    INVITE_NOT_PENDING("MATCH-409-INVITE_NOT_PENDING", HttpStatus.CONFLICT,
+            "Lời mời này đã được xử lý."),
+    CANNOT_INVITE_SELF("MATCH-403-CANNOT_INVITE_SELF", HttpStatus.FORBIDDEN,
+            "Không thể mời chính bạn làm công việc do bạn đăng."),
+
+    // --- AI ---
+    // Khong phai loi cung chan response - AiFacade khong bao gio nem exception (xem Javadoc
+    // AiFacade), ma nay chi de log/observability khi can dan chieu toi mot su kien fallback
+    // do het quota. Hien chua co cho nao thuc su throw ma nay, giu lai theo dung Javadoc dau
+    // file (prefix AI da du tru san) de day du cho muc dich quan sat/bao cao sau nay.
+    QUOTA_EXHAUSTED("AI-503-QUOTA_EXHAUSTED", HttpStatus.SERVICE_UNAVAILABLE,
+            "Hệ thống gợi ý AI tạm thời hết lượt dùng trong ngày."),
 
     // --- RVW ---
     TASK_NOT_COMPLETED("RVW-409-TASK_NOT_COMPLETED", HttpStatus.CONFLICT,

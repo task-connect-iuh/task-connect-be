@@ -22,4 +22,11 @@ public interface TaskerSkillProfileRepository extends JpaRepository<TaskerSkillP
     /** Cac nhom dich vu da VERIFIED cua mot Tasker, dung de lo badge "Da xac minh" tren ho so cong khai (GET /users/{accountId}). */
     List<TaskerSkillProfile> findByAccountIdAndVerificationStatusOrderByVerifiedAtAsc(UUID accountId,
             SkillVerificationStatus verificationStatus);
+
+    /**
+     * Toan bo ho so ky nang da khai bao cho dung mot category, moi trang thai xac minh - dung
+     * boi UserFacade.findMatchCandidates() cho module Matching (goi y Tasker). Khong tu loc
+     * VERIFIED o day, xem Javadoc UserFacade.findMatchCandidates().
+     */
+    List<TaskerSkillProfile> findByCategoryId(UUID categoryId);
 }

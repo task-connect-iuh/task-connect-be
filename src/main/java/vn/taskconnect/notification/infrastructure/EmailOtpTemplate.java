@@ -81,4 +81,16 @@ public class EmailOtpTemplate {
                 + "địa chỉ email này.\n\n"
                 + "TaskConnect";
     }
+
+    /** Tieu de email bao Tasker duoc Poster moi truc tiep lam mot cong viec (module Matching). */
+    public String taskerInvitedSubject() {
+        return "Bạn vừa được mời làm một công việc trên TaskConnect";
+    }
+
+    /** Noi dung email bao Tasker duoc moi, kem tieu de cong viec de nhan biet nhanh. */
+    public String taskerInvitedBody(String taskTitle) {
+        return "Một Task Poster vừa mời bạn làm việc: \"" + taskTitle + "\".\n\n"
+                + "Vào ứng dụng TaskConnect, mục Lời mời để xem chi tiết và phản hồi.\n\n"
+                + "TaskConnect";
+    }
 }

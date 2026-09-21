@@ -2,6 +2,7 @@ package vn.taskconnect.notification.api;
 
 import vn.taskconnect.notification.api.dto.EmailChangedNotice;
 import vn.taskconnect.notification.api.dto.EmailOtpMessage;
+import vn.taskconnect.notification.api.dto.TaskerInviteNotice;
 
 /**
  * Be mat cong khai duy nhat cua module Notification. Module khac chi duoc goi qua day,
@@ -45,4 +46,11 @@ public interface NotificationFacade {
      * cung chi duoc log, khong lam gian doan luong con lai.
      */
     void sendEmailChangedNotices(EmailChangedNotice notice);
+
+    /**
+     * Bao Tasker biet ho vua duoc mot Task Poster moi lam truc tiep mot cong viec (module
+     * Matching, luong "Poster moi Tasker" - xem TaskerInviteCreatedEvent). Cung dieu kien
+     * goi va cam ket khong nem exception nhu sendEmailVerificationOtp.
+     */
+    void notifyTaskerInvited(TaskerInviteNotice notice);
 }
