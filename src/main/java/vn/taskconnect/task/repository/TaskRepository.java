@@ -3,7 +3,10 @@ package vn.taskconnect.task.repository;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import vn.taskconnect.task.api.TaskAiFlagReason;
 import vn.taskconnect.task.api.TaskStatus;
 import vn.taskconnect.task.entity.Task;
 
@@ -28,4 +31,11 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
 
     /** Doc 1 cong viec dung trang thai - dung cho GET /tasks/{taskId}/browse (Tasker xem chi tiet 1 viec dang mo). */
     Optional<Task> findByIdAndStatus(UUID id, TaskStatus status);
+
+    /** Chi Admin: hang doi hau kiem AI (needs_admin_review = true), moi nhat truoc - xem TaskService.listFlaggedTasks(). */
+    Page<Task> findByNeedsAdminReviewTrueOrderByCreatedAtDesc(Pageable pageable);
+
+    /** Nhu tren, loc them theo ly do gan co cu the. */
+    Page<Task> findByNeedsAdminReviewTrueAndAiFlagReasonOrderByCreatedAtDesc(TaskAiFlagReason aiFlagReason,
+            Pageable pageable);
 }

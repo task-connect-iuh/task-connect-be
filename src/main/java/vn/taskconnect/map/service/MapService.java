@@ -3,6 +3,7 @@ package vn.taskconnect.map.service;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -30,8 +31,11 @@ import vn.taskconnect.map.infrastructure.VietMapClient.VietMapRouteResponse;
  * <p>reverseGeocode/autocomplete: neu VietMap van that bai sau khi retry (het quota, sap he
  * thong...), TU DONG chuyen sang Photon (mien phi, khong key, xem PhotonClient) - nguoi dung
  * khong thay gian doan, chi co the thay dia chi kem chi tiet hon/it hon chut it tuy provider
- * dang phuc vu. place/route KHONG co duong Photon tuong duong (Photon khong biet ref_id cua
- * VietMap, khong co API dinh tuyen mien phi dang tin cay) - that bai sau retry thi nem
+ * dang phuc vu. reverseGeocode CON fallback them ca khi VietMap tra HTTP 200 nhung noi dung la
+ * Plus Code (xem looksLikePlusCode()) - vai tinh thanh VietMap chua co du lieu duong pho chi
+ * tiet (vd Khanh Hoa) tra ve ma OLC thay vi dia chi that, day khong phai loi mang nen phai kiem
+ * tra rieng noi dung. place/route KHONG co duong Photon tuong duong (Photon khong biet ref_id
+ * cua VietMap, khong co API dinh tuyen mien phi dang tin cay) - that bai sau retry thi nem
  * BusinessException(MAP_PROVIDER_ERROR) nhu binh thuong; rieng route, frontend
  * (DirectionsModal.tsx) bat dung ma loi nay de tu mo Google Maps ngoai lam phuong an du phong.
  */
@@ -44,6 +48,15 @@ public class MapService {
     // nghia la: goi lan 1 -> that bai -> cho 300ms -> goi lan 2 -> that bai -> cho 700ms ->
     // goi lan 3 (cuoi) -> that bai het thi moi coi la VietMap khong kha dung.
     private static final long[] RETRY_BACKOFF_MS = {300, 700};
+
+    // VietMap tra HTTP 200 that (khong nem RestClientException) nhung noi dung la ma Open
+    // Location Code ("Plus Code", vd "7P28+7X") thay vi dia chi that - xay ra o vai tinh thanh
+    // VietMap chua co du lieu duong pho chi tiet (vd Khanh Hoa). Day KHONG phai loi mang nen
+    // callVietMapWithRetry() khong bat duoc, phai kiem tra rieng noi dung tra ve. Bang ky tu
+    // chuan Open Location Code (loai bo nguyen am va so 0/1 de tranh nham lan): "23456789CFGHJMPQRVWX".
+    private static final Pattern PLUS_CODE_PATTERN =
+            Pattern.compile("^[23456789CFGHJMPQRVWX]{4,8}\\+[23456789CFGHJMPQRVWX]{2,3}(\\s|$)",
+                    Pattern.CASE_INSENSITIVE);
 
     private final VietMapClient client;
     private final PhotonClient photonClient;
@@ -62,6 +75,11 @@ public class MapService {
             }
             VietMapPlaceItem first = items.get(0);
             String addressText = firstNonBlank(first.name(), first.display());
+            if (looksLikePlusCode(addressText)) {
+                log.warn("VietMap reverse-geocode tra ve dang Plus Code ('{}') thay vi dia chi that - "
+                        + "khu vuc nay VietMap chua co du lieu duong pho chi tiet, fallback Photon.", addressText);
+                return callFallback(() -> photonClient.reverseGeocode(lat, lng));
+            }
             Double resultLat = first.lat() != null ? first.lat().doubleValue() : null;
             Double resultLng = first.lng() != null ? first.lng().doubleValue() : null;
             return new GeocodeResultResponse(addressText, nullToEmpty(first.address()), true, resultLat, resultLng);
@@ -175,6 +193,11 @@ public class MapService {
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    /** true neu chuoi trong giong Open Location Code (Plus Code) thay vi dia chi that - xem Javadoc PLUS_CODE_PATTERN. */
+    private static boolean looksLikePlusCode(String text) {
+        return text != null && PLUS_CODE_PATTERN.matcher(text.trim()).find();
     }
 
     private static String firstNonBlank(String a, String b) {

@@ -55,7 +55,8 @@ class UserFacadeImpl implements UserFacade {
     public List<ServiceCategorySummary> listActiveServiceCategories() {
         return categoryRepository.findByActiveTrueOrderByNameAsc().stream()
                 .map(category -> new ServiceCategorySummary(
-                        category.getId(), category.getCode(), category.getName(), category.getMinExperienceYears()))
+                        category.getId(), category.getCode(), category.getName(), category.getDescription(),
+                        category.getKeywords(), category.getMinExperienceYears()))
                 .toList();
     }
 

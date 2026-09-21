@@ -6,6 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import vn.taskconnect.ai.api.AiFacade;
+import vn.taskconnect.ai.api.dto.CategoryClassificationRequest;
+import vn.taskconnect.ai.api.dto.CategoryClassificationResult;
 import vn.taskconnect.ai.api.dto.SuggestionReasonRequest;
 import vn.taskconnect.ai.api.dto.SuggestionReasonResult;
 import vn.taskconnect.ai.infrastructure.GeminiEmbeddingClient;
@@ -63,6 +65,21 @@ class AiFacadeImpl implements AiFacade {
         } catch (RuntimeException ex) {
             log.warn("Goi Groq LLM that bai, tra ve rong de nguoi goi tu fallback template: {}", ex.getMessage());
             return List.of();
+        }
+    }
+
+    /** Kiem tra quota truoc (dung chung quota LLM voi generateSuggestionReasons), goi GroqChatClient, nuot moi loi. */
+    @Override
+    public Optional<CategoryClassificationResult> classifyTaskCategory(CategoryClassificationRequest request) {
+        if (!quotaTracker.tryConsumeLlmQuota()) {
+            log.warn("Da het quota LLM trong ngay - bo qua phan loai category, tra ve rong.");
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(chatClient.classifyTaskCategory(request));
+        } catch (RuntimeException ex) {
+            log.warn("Goi Groq phan loai category that bai, tra ve rong de nguoi goi tu fallback: {}", ex.getMessage());
+            return Optional.empty();
         }
     }
 }

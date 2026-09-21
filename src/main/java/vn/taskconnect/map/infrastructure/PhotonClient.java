@@ -40,13 +40,35 @@ public class PhotonClient {
             "hanoi", "Hà Nội",
             "hanoï", "Hà Nội");
 
+    // Hop bao quanh gan dung lanh tho Viet Nam (khong phai da giac chinh xac, chi de loai tru
+    // ro rang cac nuoc lang gieng) - dung khi Photon tra ve feature THIEU tag countrycode (du
+    // lieu OSM thua/chua gan tag day du o vung nong thon it duoc so bien tap - hay gap cung
+    // vung VietMap tra Plus Code, xem MapService.looksLikePlusCode()). Toa do dau vao da duoc
+    // nguoi dung tu chon tren ban do trong pham vi hien thi cua app (chi Viet Nam), nen kiem
+    // tra hop bao quanh nay dang tin cay hon la phu thuoc hoan toan vao the countrycode co the
+    // thieu cua Photon.
+    private static final double VN_MIN_LAT = 8.0;
+    private static final double VN_MAX_LAT = 23.5;
+    private static final double VN_MIN_LNG = 102.0;
+    private static final double VN_MAX_LNG = 109.6;
+
     private final RestClient restClient = RestClient.create();
 
-    /** Toa do -> dia chi gan nhat qua Photon /reverse. supported=false neu ngoai Viet Nam/khong co du lieu. */
+    /**
+     * Toa do -> dia chi gan nhat qua Photon /reverse. radius=1 (km) de Photon tim rong hon
+     * quanh diem, phong truong hop diem chinh xac chua duoc gan tag nhung co feature lan can
+     * da duoc gan tag (duong/khu dan cu gan do) - neu khong co radius, Photon chi tra feature
+     * TRUNG KHOP toa do, thuong la null o vung thua du lieu OSM.
+     *
+     * <p>supported=false CHI khi khong co feature nao VA toa do dau vao nam ngoai hop bao quanh
+     * Viet Nam (xem VN_MIN_LAT...VN_MAX_LNG) - chap nhan feature thieu countrycode neu toa do
+     * dau vao ro rang nam trong Viet Nam, tranh chan nham nguoi dung o vung it du lieu OSM.
+     */
     public GeocodeResultResponse reverseGeocode(BigDecimal lat, BigDecimal lng) {
         URI uri = UriComponentsBuilder.fromHttpUrl(REVERSE_URL)
                 .queryParam("lon", lng)
                 .queryParam("lat", lat)
+                .queryParam("radius", 1)
                 .encode(StandardCharsets.UTF_8)
                 .build()
                 .toUri();
@@ -54,7 +76,8 @@ public class PhotonClient {
         PhotonFeature first = response == null || response.features() == null || response.features().isEmpty()
                 ? null : response.features().get(0);
         PhotonProperties properties = first == null ? null : first.properties();
-        if (properties == null || !"VN".equals(properties.countrycode())) {
+        boolean taggedAsVietnam = properties != null && "VN".equals(properties.countrycode());
+        if (properties == null || (!taggedAsVietnam && !isWithinVietnamBounds(lat, lng))) {
             return new GeocodeResultResponse("", "", false, null, null);
         }
         AddressParts parts = toAddressParts(properties);
@@ -130,6 +153,13 @@ public class PhotonClient {
 
     private static String nullToEmpty(String s) {
         return s == null ? "" : s;
+    }
+
+    /** true neu toa do nam trong hop bao quanh Viet Nam - xem Javadoc hang so VN_MIN_LAT...VN_MAX_LNG. */
+    private static boolean isWithinVietnamBounds(BigDecimal lat, BigDecimal lng) {
+        double latValue = lat.doubleValue();
+        double lngValue = lng.doubleValue();
+        return latValue >= VN_MIN_LAT && latValue <= VN_MAX_LAT && lngValue >= VN_MIN_LNG && lngValue <= VN_MAX_LNG;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
