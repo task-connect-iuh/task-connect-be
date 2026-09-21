@@ -144,7 +144,7 @@ public class TaskApplicationService {
                     String posterName = posterNameById.computeIfAbsent(task.getPosterId(), this::resolveDisplayName);
                     return new MyApplicationResponse(app.getId(), app.getStatus(), app.getProposedArrivalText(),
                             app.getMessage(), app.getCreatedAt(), app.getRespondedAt(), task.getId(), task.getTitle(),
-                            task.getAddressText(), task.getBudgetAmount(),
+                            task.getAddressText(), task.getLat(), task.getLng(), task.getBudgetAmount(),
                             task.getScheduledAt(), task.getStatus(), task.getCategoryId(),
                             categoryNameById.get(task.getCategoryId()), posterName,
                             imageUrlsByTaskId.getOrDefault(task.getId(), List.of()));

@@ -9,7 +9,7 @@ import org.springframework.http.HttpStatus;
  * Phan so trong ma phai trung {@link #status} — day la rang buoc bat buoc cua hop dong API,
  * duoc kiem tra bang unit test chu khong dua vao mat nguoi.
  *
- * <p>Prefix theo module: AUTH, USR, TSK, MATCH, BKG, PAY, RVW, CHT, NTF, ADM, AI.
+ * <p>Prefix theo module: AUTH, USR, TSK, MATCH, BKG, PAY, RVW, CHT, NTF, ADM, AI, MAP.
  * Prefix {@code COMMON} danh cho loi ky thuat dung chung, khong thuoc module nao.
  *
  * <p>Them ma moi thi bo sung vao {@code docs/ERROR-CODES.md} cung luc, khong de ma song
@@ -203,7 +203,11 @@ public enum ErrorCode {
 
     // --- PAY ---
     INSUFFICIENT_BALANCE("PAY-402-INSUFFICIENT_BALANCE", HttpStatus.PAYMENT_REQUIRED,
-            "Số dư ví không đủ để thực hiện giao dịch.");
+            "Số dư ví không đủ để thực hiện giao dịch."),
+
+    // --- MAP ---
+    MAP_PROVIDER_ERROR("MAP-502-PROVIDER_ERROR", HttpStatus.BAD_GATEWAY,
+            "Không kết nối được dịch vụ bản đồ (VietMap), vui lòng thử lại sau.");
 
     private final String code;
     private final HttpStatus status;

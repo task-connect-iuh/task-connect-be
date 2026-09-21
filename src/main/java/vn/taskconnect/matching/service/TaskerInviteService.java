@@ -138,6 +138,7 @@ public class TaskerInviteService {
                             id -> userFacade.findProfile(id).map(UserProfileSummary::fullName).orElse(null));
                     return new MyInviteResponse(invite.getId(), invite.getStatus(), invite.getCreatedAt(),
                             invite.getRespondedAt(), task.id(), task.title(), task.addressText(),
+                            task.lat(), task.lng(),
                             task.budgetAmount(), task.scheduledAt(), task.status(), task.categoryId(),
                             categoryNameById.get(task.categoryId()), posterName, List.of());
                 }).orElse(null))

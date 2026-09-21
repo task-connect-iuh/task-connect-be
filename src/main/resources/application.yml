@@ -157,6 +157,15 @@ ai:
     # thuc te ngan hon uoc tinh.
     daily-quota: ${AI_LLM_DAILY_QUOTA:80}
 
+vietmap:
+  # maps.vietmap.vn - reverse geocode/autocomplete/place/dinh tuyen. Goi TU BACKEND (khong
+  # phai frontend) de khong lo api-key qua network tab/bundle JS - khac tilemap-key (VITE_
+  # VIETMAP_TILEMAP_KEY ben task-connect-fe/.env), key do dung de MapLibre/vietmap-gl-js tai
+  # tile/style truc tiep tu trinh duyet nen buoc phai cong khai, khong proxy duoc qua backend.
+  # Bat buoc set qua bien moi truong, khong dat default - giong GEMINI_API_KEY/GROQ_API_KEY.
+  api-key: ${VIETMAP_API_KEY}
+  base-url: ${VIETMAP_BASE_URL:https://maps.vietmap.vn}
+
 matching:
   weights:
     # Trong so xep hang cau truc (structuredScore), tong = 1.0 - xem
