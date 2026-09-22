@@ -21,6 +21,7 @@ import vn.taskconnect.user.api.KycStatus;
 import vn.taskconnect.user.api.SkillVerificationStatus;
 import vn.taskconnect.user.dto.request.RejectCertificationRequest;
 import vn.taskconnect.user.dto.request.SubmitSkillRequest;
+import vn.taskconnect.user.dto.request.UpdateAcceptsDirectInvitesRequest;
 import vn.taskconnect.user.dto.response.CertificationReviewResponse;
 import vn.taskconnect.user.dto.response.CertificationReviewSummaryResponse;
 import vn.taskconnect.user.dto.response.TaskerSkillResponse;
@@ -95,6 +96,7 @@ public class TaskerSkillService {
         requireKycSubmitted(accountId);
         requireValidCertificateType(request.categoryId(), request.certificateTypeId());
         requireDateOrder(request.issuedDate(), request.expiryDate());
+        requirePriceRange(request.priceMin(), request.priceMax());
         requireOwnCertificatePrefix(accountId, request.categoryId(), request.fileKey());
 
         Instant now = clock.instant();
@@ -121,6 +123,19 @@ public class TaskerSkillService {
         certification = certificationRepository.save(certification);
 
         return toResponse(profile, certification);
+    }
+
+    /**
+     * Bat/tat cong tac nhan loi moi truc tiep (INVITED, UC09, Round B5) cho mot category - ho
+     * so ky nang cho category do phai da ton tai (SKILL_NOT_FOUND neu chua khai bao ky nang
+     * nao cho category nay, khong tao moi ngam).
+     */
+    @Transactional
+    public TaskerSkillResponse updateAcceptsDirectInvites(UUID accountId, UUID categoryId,
+            UpdateAcceptsDirectInvitesRequest request) {
+        TaskerSkillProfile profile = requireSkillProfile(accountId, categoryId);
+        profile.setAcceptsDirectInvites(request.acceptsDirectInvites(), clock.instant());
+        return toResponse(profile, latestCertificationOrNull(accountId, categoryId));
     }
 
     /** Danh sach moi category chinh chu tai khoan da khai bao, kem trang thai chung chi gan nhat. */
@@ -264,8 +279,9 @@ public class TaskerSkillService {
         String latestIssuingAuthority = latestCertification != null ? latestCertification.getIssuingAuthority() : null;
         LocalDate latestIssuedDate = latestCertification != null ? latestCertification.getIssuedDate() : null;
         return new TaskerSkillResponse(profile.getCategoryId(), profile.getYearsExperience(), profile.getPriceMin(),
-                profile.getPriceMax(), profile.getVerificationStatus(), profile.getVerifiedAt(), latestId,
-                latestStatus, latestRejectionReason, latestCertificateNumber, latestIssuingAuthority, latestIssuedDate);
+                profile.getPriceMax(), profile.getVerificationStatus(), profile.getVerifiedAt(),
+                profile.isAcceptsDirectInvites(), latestId, latestStatus, latestRejectionReason,
+                latestCertificateNumber, latestIssuingAuthority, latestIssuedDate);
     }
 
     private CertificationReviewResponse toReviewResponse(TaskerCertification certification) {
@@ -335,6 +351,23 @@ public class TaskerSkillService {
     private void requireDateOrder(LocalDate issuedDate, LocalDate expiryDate) {
         if (issuedDate != null && expiryDate != null && expiryDate.isBefore(issuedDate)) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Ngày hết hạn không được trước ngày cấp.");
+        }
+    }
+
+    /**
+     * Gia tham khao min-max la cap "tat ca hoac khong co gi": bo trong ca hai van hop le (Tasker
+     * chua muon cong bo gia), nhung da nhap mot dau thi phai nhap du ca hai - va gia toi da phai
+     * lon hon gia toi thieu. Bien do tung gia (50.000 d - 10.000.000 d) do Bean Validation lo o
+     * SubmitSkillRequest, day chi lo phan lien-field ma annotation khong dien ta duoc.
+     */
+    private void requirePriceRange(Long priceMin, Long priceMax) {
+        if ((priceMin == null) != (priceMax == null)) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+                    "Nhập đủ cả giá tối thiểu và giá tối đa, hoặc bỏ trống cả hai.");
+        }
+        if (priceMin != null && priceMax <= priceMin) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+                    "Giá tối đa phải lớn hơn giá tối thiểu.");
         }
     }
 

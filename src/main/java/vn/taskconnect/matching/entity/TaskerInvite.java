@@ -14,7 +14,7 @@ import vn.taskconnect.matching.api.TaskerInviteStatus;
 
 /**
  * Mot loi moi Poster gui truc tiep cho mot Tasker cho mot Task cu the (luong "Poster moi
- * Tasker", song song voi TaskApplication/UC10 - xem V26__create_matching_tables.sql).
+ * Tasker", song song voi TaskApplication/UC10 - xem V35__create_matching_tables.sql).
  * Mirror TaskApplication.java: chuyen trang thai khong tu validate ben trong entity, dieu
  * kien hop le (task dang OPEN, chua moi trung Tasker nay...) kiem tra o TaskerInviteService.
  */

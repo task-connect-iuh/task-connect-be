@@ -12,7 +12,7 @@ import org.hibernate.type.SqlTypes;
 /**
  * Cache embedding vector cua ho so mot Tasker cho MOT nhom dich vu (bio + facts ky nang),
  * dung cho buoc rerank ngu nghia cua module Matching (xem
- * TaskerMatchingService/V26__create_matching_tables.sql). vector luu duoi dang chuoi JSON
+ * TaskerMatchingService/V35__create_matching_tables.sql). vector luu duoi dang chuoi JSON
  * cua mang float trong cot TEXT (khong dung kieu vector rieng vi MariaDB hien tai khong ho
  * tro, va quy mo brute-force cosine trong Java la du - xem plan da duyet, phan "Vector DB
  * that"). Serialize/deserialize JSON thuc hien o tang service goi entity nay, khong o day.

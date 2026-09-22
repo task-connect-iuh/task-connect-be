@@ -17,6 +17,7 @@ import vn.taskconnect.ai.api.dto.CategoryClassificationRequest;
 import vn.taskconnect.ai.api.dto.CategoryClassificationResult;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
+import vn.taskconnect.task.api.TaskApplicationStatus;
 import vn.taskconnect.task.api.TaskAiFlagReason;
 import vn.taskconnect.task.api.TaskStatus;
 import vn.taskconnect.task.dto.request.CreateTaskRequest;
@@ -24,7 +25,9 @@ import vn.taskconnect.task.dto.request.RejectTaskRequest;
 import vn.taskconnect.task.dto.response.TaskResponse;
 import vn.taskconnect.task.dto.response.TaskReviewSummaryResponse;
 import vn.taskconnect.task.entity.Task;
+import vn.taskconnect.task.entity.TaskApplication;
 import vn.taskconnect.task.entity.TaskImage;
+import vn.taskconnect.task.repository.TaskApplicationRepository;
 import vn.taskconnect.task.repository.TaskImageRepository;
 import vn.taskconnect.task.repository.TaskRepository;
 import vn.taskconnect.user.api.UserFacade;
@@ -72,14 +75,16 @@ public class TaskService {
 
     private final TaskRepository taskRepository;
     private final TaskImageRepository imageRepository;
+    private final TaskApplicationRepository applicationRepository;
     private final UserFacade userFacade;
     private final AiFacade aiFacade;
     private final Clock clock;
 
-    public TaskService(TaskRepository taskRepository, TaskImageRepository imageRepository, UserFacade userFacade,
-            AiFacade aiFacade, Clock clock) {
+    public TaskService(TaskRepository taskRepository, TaskImageRepository imageRepository,
+            TaskApplicationRepository applicationRepository, UserFacade userFacade, AiFacade aiFacade, Clock clock) {
         this.taskRepository = taskRepository;
         this.imageRepository = imageRepository;
+        this.applicationRepository = applicationRepository;
         this.userFacade = userFacade;
         this.aiFacade = aiFacade;
         this.clock = clock;
@@ -114,13 +119,14 @@ public class TaskService {
                 ? request.estimatedWorkersNeeded() : DEFAULT_ESTIMATED_WORKERS_NEEDED;
         Task task = Task.createOpen(UUID.randomUUID(), posterId, request.categoryId(), request.title(),
                 request.description(), request.addressText(), request.lat(), request.lng(), request.locationType(),
-                request.arrivalNotes(), request.budgetAmount(), request.scheduledAt(), estimatedWorkersNeeded, now);
+                request.arrivalNotes(), request.suppliesStatus(), request.suppliesNote(), request.budgetAmount(),
+                request.scheduledAt(), estimatedWorkersNeeded, now);
         classifyAndFlag(task, request.description(), categories);
         taskRepository.save(task);
 
         List<TaskImage> savedImages = saveImages(task.getId(), imageUrls);
         return TaskResponse.from(task, category.name(),
-                savedImages.stream().map(TaskImage::getImageUrl).toList());
+                savedImages.stream().map(TaskImage::getImageUrl).toList(), 0);
     }
 
     /** Danh sach cong viec da dang cua chinh Poster dang goi, moi dang gan day nhat truoc. */
@@ -130,14 +136,19 @@ public class TaskService {
         if (tasks.isEmpty()) {
             return List.of();
         }
+        List<UUID> taskIds = tasks.stream().map(Task::getId).toList();
         Map<UUID, String> categoryNameById = activeCategoryNameById();
         Map<UUID, List<String>> imageUrlsByTaskId = imageRepository
-                .findByTaskIdInOrderByDisplayOrderAsc(tasks.stream().map(Task::getId).toList()).stream()
+                .findByTaskIdInOrderByDisplayOrderAsc(taskIds).stream()
                 .collect(Collectors.groupingBy(TaskImage::getTaskId,
                         Collectors.mapping(TaskImage::getImageUrl, Collectors.toList())));
+        Map<UUID, Long> pendingCountByTaskId = applicationRepository
+                .findByTaskIdInAndStatus(taskIds, TaskApplicationStatus.PENDING).stream()
+                .collect(Collectors.groupingBy(TaskApplication::getTaskId, Collectors.counting()));
         return tasks.stream()
                 .map(task -> TaskResponse.from(task, categoryNameById.get(task.getCategoryId()),
-                        imageUrlsByTaskId.getOrDefault(task.getId(), List.of())))
+                        imageUrlsByTaskId.getOrDefault(task.getId(), List.of()),
+                        pendingCountByTaskId.getOrDefault(task.getId(), 0L).intValue()))
                 .toList();
     }
 
@@ -155,7 +166,9 @@ public class TaskService {
         String categoryName = activeCategoryNameById().get(task.getCategoryId());
         List<String> imageUrls = imageRepository.findByTaskIdOrderByDisplayOrderAsc(taskId).stream()
                 .map(TaskImage::getImageUrl).toList();
-        return TaskResponse.from(task, categoryName, imageUrls);
+        int pendingApplicantCount = (int) applicationRepository.countByTaskIdAndStatus(taskId,
+                TaskApplicationStatus.PENDING);
+        return TaskResponse.from(task, categoryName, imageUrls, pendingApplicantCount);
     }
 
     /**

@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import vn.taskconnect.task.api.SuppliesStatus;
 import vn.taskconnect.task.api.TaskAiFlagReason;
 import vn.taskconnect.task.api.TaskStatus;
 import vn.taskconnect.user.api.LocationType;
@@ -24,7 +25,8 @@ import vn.taskconnect.user.api.LocationType;
  * cung ten cua user_profiles - FE dien san tu ho so luc mo form dang viec (xem V24) nhung
  * khong tham chieu qua lai sau do. LocationType tai su dung enum cua module User qua goi
  * api/ (xem .claude/rules/00-architecture.md), khong dinh nghia enum rieng vi cung mot khai
- * niem nghiep vu.
+ * niem nghiep vu. suppliesStatus bat buoc, suppliesNote luon tuy chon du suppliesStatus la gia
+ * tri nao (xem V26__add_supplies_fields_to_task_tasks.sql).
  */
 @Entity
 @Table(name = "task_tasks")
@@ -64,6 +66,13 @@ public class Task {
 
     @Column(name = "arrival_notes", length = 500)
     private String arrivalNotes;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "supplies_status", nullable = false, length = 20)
+    private SuppliesStatus suppliesStatus;
+
+    @Column(name = "supplies_note", columnDefinition = "TEXT")
+    private String suppliesNote;
 
     @JdbcTypeCode(SqlTypes.BIGINT)
     @Column(name = "budget_amount")
@@ -113,8 +122,9 @@ public class Task {
     }
 
     private Task(UUID id, UUID posterId, UUID categoryId, String title, String description, String addressText,
-            BigDecimal lat, BigDecimal lng, LocationType locationType, String arrivalNotes, Long budgetAmount,
-            Instant scheduledAt, int estimatedWorkersNeeded, TaskStatus status, Instant now) {
+            BigDecimal lat, BigDecimal lng, LocationType locationType, String arrivalNotes,
+            SuppliesStatus suppliesStatus, String suppliesNote, Long budgetAmount, Instant scheduledAt,
+            int estimatedWorkersNeeded, TaskStatus status, Instant now) {
         this.id = id;
         this.posterId = posterId;
         this.categoryId = categoryId;
@@ -125,6 +135,8 @@ public class Task {
         this.lng = lng;
         this.locationType = locationType;
         this.arrivalNotes = arrivalNotes;
+        this.suppliesStatus = suppliesStatus;
+        this.suppliesNote = suppliesNote;
         this.budgetAmount = budgetAmount;
         this.scheduledAt = scheduledAt;
         this.estimatedWorkersNeeded = estimatedWorkersNeeded;
@@ -142,9 +154,11 @@ public class Task {
      */
     public static Task createOpen(UUID id, UUID posterId, UUID categoryId, String title, String description,
             String addressText, BigDecimal lat, BigDecimal lng, LocationType locationType, String arrivalNotes,
-            Long budgetAmount, Instant scheduledAt, int estimatedWorkersNeeded, Instant now) {
+            SuppliesStatus suppliesStatus, String suppliesNote, Long budgetAmount, Instant scheduledAt,
+            int estimatedWorkersNeeded, Instant now) {
         return new Task(id, posterId, categoryId, title, description, addressText, lat, lng, locationType,
-                arrivalNotes, budgetAmount, scheduledAt, estimatedWorkersNeeded, TaskStatus.OPEN, now);
+                arrivalNotes, suppliesStatus, suppliesNote, budgetAmount, scheduledAt, estimatedWorkersNeeded,
+                TaskStatus.OPEN, now);
     }
 
     /**
@@ -248,6 +262,16 @@ public class Task {
     /** Luu y cho Tasker khi toi noi lam viec, null neu khong khai bao. */
     public String getArrivalNotes() {
         return arrivalNotes;
+    }
+
+    /** Tinh trang vat tu Poster da chuan bi cho cong viec nay, bat buoc phai co gia tri. */
+    public SuppliesStatus getSuppliesStatus() {
+        return suppliesStatus;
+    }
+
+    /** Mo ta them ve vat tu, null neu khong khai bao - tuy chon du suppliesStatus la gia tri nao. */
+    public String getSuppliesNote() {
+        return suppliesNote;
     }
 
     /** Ngan sach du kien (don vi dong), null nghia la "thoa thuan" - tuy chon, khong bat buoc. */

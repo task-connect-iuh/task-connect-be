@@ -1,6 +1,8 @@
 package vn.taskconnect.auth.repository;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -25,15 +27,23 @@ public interface AuthAccountRepository extends JpaRepository<AuthAccount, UUID> 
     boolean existsByPhoneAndIdNot(String phone, UUID id);
 
     /**
-     * Xoa hang loat tai khoan qua han theo status va moc tao (bulk JPQL DELETE, khong
-     * load tung entity qua vong doi Hibernate) - dung cho AuthAccountCleanupService don
-     * dep dinh ky tai khoan UNVERIFIED bo do khong bao gio xac minh email. ON DELETE
-     * CASCADE tren auth_account_roles/auth_refresh_tokens/auth_email_verification_tokens
-     * (xem V1__create_auth_tables.sql) tu don theo, khong de lai dong mo coi.
+     * Lay danh sach id tai khoan qua han theo status va moc tao - dung cho
+     * AuthAccountCleanupService de xoa truoc du lieu phu thuoc (vd user_profiles, qua
+     * UserFacade) roi moi xoa chinh tai khoan bang deleteByIdIn(), tranh loi FK RESTRICT.
+     */
+    @Query("select a.id from AuthAccount a where a.status = :status and a.createdAt < :cutoff")
+    List<UUID> findIdsByStatusAndCreatedAtBefore(@Param("status") AccountStatus status, @Param("cutoff") Instant cutoff);
+
+    /**
+     * Xoa hang loat tai khoan theo danh sach id cu the (bulk JPQL DELETE, khong load tung
+     * entity qua vong doi Hibernate) - dung sau khi da xoa xong du lieu phu thuoc gan voi
+     * cung danh sach id nay (xem findIdsByStatusAndCreatedAtBefore). ON DELETE CASCADE tren
+     * auth_account_roles/auth_refresh_tokens/auth_email_verification_tokens (xem
+     * V1__create_auth_tables.sql) tu don theo, khong de lai dong mo coi.
      *
      * @return so tai khoan da xoa, dung de ghi log
      */
     @Modifying
-    @Query("delete from AuthAccount a where a.status = :status and a.createdAt < :cutoff")
-    int deleteByStatusAndCreatedAtBefore(@Param("status") AccountStatus status, @Param("cutoff") Instant cutoff);
+    @Query("delete from AuthAccount a where a.id in :ids")
+    int deleteByIdIn(@Param("ids") Collection<UUID> ids);
 }

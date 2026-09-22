@@ -22,6 +22,9 @@ import vn.taskconnect.user.repository.SavedAddressRepository;
 @Service
 public class SavedAddressService {
 
+    /** Gioi han so dia chi da luu toi da moi tai khoan - chot cung nguoi dung 2026-09-14. */
+    private static final int MAX_SAVED_ADDRESSES_PER_ACCOUNT = 5;
+
     private final SavedAddressRepository addressRepository;
     private final Clock clock;
 
@@ -30,9 +33,12 @@ public class SavedAddressService {
         this.clock = clock;
     }
 
-    /** Luu mot dia chi moi. */
+    /** Luu mot dia chi moi - chan neu tai khoan da dat gioi han MAX_SAVED_ADDRESSES_PER_ACCOUNT. */
     @Transactional
     public SavedAddress addAddress(UUID accountId, CreateSavedAddressRequest request) {
+        if (addressRepository.countByAccountId(accountId) >= MAX_SAVED_ADDRESSES_PER_ACCOUNT) {
+            throw new BusinessException(ErrorCode.SAVED_ADDRESS_LIMIT_REACHED);
+        }
         Instant now = clock.instant();
         SavedAddress address = new SavedAddress(UUID.randomUUID(), accountId, request.label(),
                 request.addressText(), request.lat(), request.lng(), request.locationType(),

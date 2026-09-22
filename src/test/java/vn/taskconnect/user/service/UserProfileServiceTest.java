@@ -222,7 +222,8 @@ class UserProfileServiceTest {
     // UC03-09: UserFacade.findProfile khi chua co ho so -> Optional rong, khong throw.
     @Test
     void should_returnEmptyOptional_when_facadeFindsNoProfile() {
-        UserFacadeImpl facade = new UserFacadeImpl(repository, mock(ServiceCategoryRepository.class), Clock.fixed(FIXED_NOW, ZoneOffset.UTC));
+        UserFacadeImpl facade = new UserFacadeImpl(repository, mock(ServiceCategoryRepository.class),
+                mock(TaskerSkillProfileRepository.class), Clock.fixed(FIXED_NOW, ZoneOffset.UTC));
         when(repository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.empty());
 
         assertThat(facade.findProfile(ACCOUNT_ID)).isEmpty();
