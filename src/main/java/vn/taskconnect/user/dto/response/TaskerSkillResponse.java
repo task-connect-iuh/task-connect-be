@@ -13,7 +13,8 @@ import vn.taskconnect.user.api.SkillVerificationStatus;
  * PATCH /users/me/tasker-certifications/{id}/cancel khi dang PENDING_REVIEW, khong can goi
  * rieng getCertificationsForReview chi de lay id. latestCertificateNumber/latestIssuingAuthority/
  * latestIssuedDate them de FE ve duoc the tom tat ("So hieu"/"Ngay cap"/noi cap) ma khong
- * phai goi rieng getMyCertifications - null neu chua tung nop lan nao.
+ * phai goi rieng getMyCertifications - null neu chua tung nop lan nao. acceptsDirectInvites
+ * them tu Round B5 de FE ve duoc cong tac nhan loi moi truc tiep (UC09) cho tung category.
  */
 public record TaskerSkillResponse(
         UUID categoryId,
@@ -22,6 +23,7 @@ public record TaskerSkillResponse(
         Long priceMax,
         SkillVerificationStatus verificationStatus,
         Instant verifiedAt,
+        boolean acceptsDirectInvites,
         UUID latestCertificationId,
         CertificationStatus latestCertificationStatus,
         String latestCertificationRejectionReason,

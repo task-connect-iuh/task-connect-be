@@ -30,6 +30,7 @@ import vn.taskconnect.auth.api.event.EmailChangedEvent;
 import vn.taskconnect.auth.api.event.EmailVerificationRequestedEvent;
 import vn.taskconnect.auth.api.event.PasswordResetRequestedEvent;
 import vn.taskconnect.auth.dto.request.ChangePasswordRequest;
+import vn.taskconnect.auth.dto.request.CheckPhoneRequest;
 import vn.taskconnect.auth.dto.request.ForgotPasswordRequest;
 import vn.taskconnect.auth.dto.request.GoogleLoginRequest;
 import vn.taskconnect.auth.dto.request.GrantAdminRoleRequest;
@@ -664,6 +665,22 @@ public class AuthService {
         try {
             accountRepository.saveAndFlush(account);
         } catch (DataIntegrityViolationException ex) {
+            throw new BusinessException(ErrorCode.PHONE_EXISTS);
+        }
+    }
+
+    /**
+     * Kiem tra so dien thoai da duoc tai khoan khac dung chua - goi truoc khi gui OTP Firebase
+     * o buoc nhap so (PhoneVerificationFlow.tsx), de bao AUTH-409-PHONE_EXISTS ngay khi nguoi
+     * dung vua go xong so thay vi phai doi den luc xac nhan OTP moi biet (cung tinh than
+     * existsByEmail() trong requestNewEmailForChange() - check-som cho email). Khong thay the
+     * check lai trong updatePhone(): so co the vua bi tai khoan khac dang ky trong luc nguoi
+     * dung dang cho nhap OTP (race condition), updatePhone() van la nguon su that cuoi cung.
+     */
+    @Transactional(readOnly = true)
+    public void checkPhoneAvailable(UUID accountId, CheckPhoneRequest request) {
+        String phone = normalizePhone(request.phone());
+        if (phone != null && accountRepository.existsByPhoneAndIdNot(phone, accountId)) {
             throw new BusinessException(ErrorCode.PHONE_EXISTS);
         }
     }

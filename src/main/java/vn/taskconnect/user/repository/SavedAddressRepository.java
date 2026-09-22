@@ -13,4 +13,7 @@ public interface SavedAddressRepository extends JpaRepository<SavedAddress, UUID
 
     /** Toan bo dia chi da luu cua mot tai khoan, moi luu gan day nhat truoc - dung cho danh sach chon nhanh. */
     List<SavedAddress> findByAccountIdOrderByCreatedAtDesc(UUID accountId);
+
+    /** Dem so dia chi da luu cua mot tai khoan - dung de chan them moi khi da dat gioi han. */
+    long countByAccountId(UUID accountId);
 }

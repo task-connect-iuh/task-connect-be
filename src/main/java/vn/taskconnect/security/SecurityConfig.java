@@ -40,7 +40,11 @@ public class SecurityConfig {
             "/v3/api-docs",
             "/v3/api-docs/**",
             "/swagger-ui.html",
-            "/swagger-ui/**"
+            "/swagger-ui/**",
+            // Handshake HTTP nang cap len WebSocket - JWT xac thuc rieng ben trong frame STOMP
+            // CONNECT (StompAuthChannelInterceptor), khong the dinh kem header luc handshake vi
+            // WebSocket API cua trinh duyet khong cho dat header tuy y. Xem chat/infrastructure/.
+            "/ws/**"
     };
 
     @Bean

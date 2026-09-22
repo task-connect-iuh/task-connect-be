@@ -1,6 +1,6 @@
 -- Module Task + AI. Quyet dinh moi: Poster chon danh muc hoan toan tu do, khong con so sanh
 -- voi danh muc AI de xuat - bo nhom ly do hau kiem POSTER_OVERRIDE va 2 cot luu ket qua so
--- sanh (ai_suggested_category_id/ai_confidence, xem V30). AI chi con phat hien OTHER_CATEGORY
+-- sanh (ai_suggested_category_id/ai_confidence, xem V38). AI chi con phat hien OTHER_CATEGORY
 -- va 3 nhom SUSPICIOUS.
 --
 -- Don du lieu test cu (neu co) truoc khi sua CHECK constraint, tranh vi pham rang buoc.

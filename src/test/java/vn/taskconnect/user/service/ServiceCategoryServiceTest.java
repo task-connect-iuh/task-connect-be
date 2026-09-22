@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import vn.taskconnect.user.api.dto.ServiceCategorySummary;
 import vn.taskconnect.user.entity.ServiceCategory;
 import vn.taskconnect.user.repository.ServiceCategoryRepository;
+import vn.taskconnect.user.repository.TaskerSkillProfileRepository;
 import vn.taskconnect.user.repository.UserProfileRepository;
 
 /**
@@ -67,7 +68,8 @@ class ServiceCategoryServiceTest {
         ServiceCategory dienLanh = categoryOf(categoryId, "DIEN_LANH", "Điện lạnh", 2);
         UserProfileRepository profileRepository = mock(UserProfileRepository.class);
         when(repository.findByActiveTrueOrderByNameAsc()).thenReturn(List.of(dienLanh));
-        UserFacadeImpl facade = new UserFacadeImpl(profileRepository, repository, Clock.systemUTC());
+        UserFacadeImpl facade = new UserFacadeImpl(profileRepository, repository,
+                mock(TaskerSkillProfileRepository.class), Clock.systemUTC());
 
         List<ServiceCategorySummary> result = facade.listActiveServiceCategories();
 

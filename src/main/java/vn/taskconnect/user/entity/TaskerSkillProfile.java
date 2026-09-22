@@ -54,6 +54,13 @@ public class TaskerSkillProfile {
     @Column(name = "verified_at")
     private Instant verifiedAt;
 
+    /**
+     * FALSE = Tasker chan moi loi moi truc tiep (INVITED, UC09) tu Poster cho category nay.
+     * Xem V29__add_accepts_direct_invites_to_tasker_skill_profiles.sql, mac dinh TRUE.
+     */
+    @Column(name = "accepts_direct_invites", nullable = false)
+    private boolean acceptsDirectInvites;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -74,7 +81,14 @@ public class TaskerSkillProfile {
         this.priceMin = priceMin;
         this.priceMax = priceMax;
         this.verificationStatus = SkillVerificationStatus.PENDING;
+        this.acceptsDirectInvites = true;
         this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    /** Bat/tat cong tac nhan loi moi truc tiep tu Poster cho category nay (UC09). */
+    public void setAcceptsDirectInvites(boolean acceptsDirectInvites, Instant now) {
+        this.acceptsDirectInvites = acceptsDirectInvites;
         this.updatedAt = now;
     }
 
@@ -151,6 +165,11 @@ public class TaskerSkillProfile {
     /** Thoi diem duoc xac minh VERIFIED, null neu chua tung duoc xac minh. */
     public Instant getVerifiedAt() {
         return verifiedAt;
+    }
+
+    /** Tasker co dang cho phep nhan loi moi truc tiep (INVITED) cho category nay khong. */
+    public boolean isAcceptsDirectInvites() {
+        return acceptsDirectInvites;
     }
 
     /** Thoi diem tao ho so lan dau. */

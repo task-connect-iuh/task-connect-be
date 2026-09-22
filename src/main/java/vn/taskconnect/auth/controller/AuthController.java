@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import vn.taskconnect.auth.dto.request.ChangePasswordRequest;
+import vn.taskconnect.auth.dto.request.CheckPhoneRequest;
 import vn.taskconnect.auth.dto.request.ForgotPasswordRequest;
 import vn.taskconnect.auth.dto.request.GoogleLoginRequest;
 import vn.taskconnect.auth.dto.request.GrantAdminRoleRequest;
@@ -240,6 +241,20 @@ public class AuthController {
             @Valid @RequestBody UpdatePhoneRequest request) {
         authService.updatePhone(principal.accountId(), request);
         return ApiResponse.ok(null, "Cập nhật số điện thoại thành công.");
+    }
+
+    /**
+     * Kiem tra so dien thoai da ton tai chua TRUOC khi gui OTP Firebase (buoc 1 cua
+     * PhoneVerificationFlow.tsx), tranh nguoi dung phai cho den buoc nhap OTP moi biet so da
+     * bi dung. Rate-limit rieng (RateLimitFilter) vi day la endpoint co the bi loi dung de do
+     * xem so dien thoai nao da duoc dang ky (enumeration).
+     */
+    @PostMapping("/me/phone/check")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<Void> checkPhoneAvailable(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @Valid @RequestBody CheckPhoneRequest request) {
+        authService.checkPhoneAvailable(principal.accountId(), request);
+        return ApiResponse.ok(null);
     }
 
     /**

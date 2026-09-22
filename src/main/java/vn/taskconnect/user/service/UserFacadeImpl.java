@@ -2,6 +2,7 @@ package vn.taskconnect.user.service;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -15,8 +16,8 @@ import vn.taskconnect.user.api.dto.UserProfileSummary;
 import vn.taskconnect.user.entity.TaskerSkillProfile;
 import vn.taskconnect.user.entity.UserProfile;
 import vn.taskconnect.user.repository.ServiceCategoryRepository;
-import vn.taskconnect.user.repository.TaskerAvailabilityRepository;
 import vn.taskconnect.user.repository.TaskerSkillProfileRepository;
+import vn.taskconnect.user.repository.TaskerAvailabilityRepository;
 import vn.taskconnect.user.repository.UserProfileRepository;
 
 @Service
@@ -75,6 +76,31 @@ class UserFacadeImpl implements UserFacade {
         }
         Instant now = clock.instant();
         profileRepository.save(new UserProfile(UUID.randomUUID(), accountId, fullName, "", now));
+    }
+
+    /**
+     * Doc cong tac accepts_direct_invites tren ho so ky nang dung category - false neu Tasker
+     * chua tung khai bao ho so ky nang cho category do (khong co profile de moi vao).
+     */
+    @Override
+    public boolean acceptsDirectInvites(UUID accountId, UUID categoryId) {
+        return skillProfileRepository.findByAccountIdAndCategoryId(accountId, categoryId)
+                .map(TaskerSkillProfile::isAcceptsDirectInvites)
+                .orElse(false);
+    }
+
+    /**
+     * Goi tu Auth (AuthAccountCleanupService) truoc khi xoa tai khoan UNVERIFIED qua han -
+     * xoa truoc ho so gan voi cac accountId nay de tranh loi FK RESTRICT tu
+     * fk_user_profiles_account khi Auth xoa chinh tai khoan.
+     */
+    @Override
+    @Transactional
+    public int deleteProfilesByAccountIds(Collection<UUID> accountIds) {
+        if (accountIds.isEmpty()) {
+            return 0;
+        }
+        return profileRepository.deleteByAccountIdIn(accountIds);
     }
 
     /**

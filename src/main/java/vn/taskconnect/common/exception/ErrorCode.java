@@ -9,7 +9,7 @@ import org.springframework.http.HttpStatus;
  * Phan so trong ma phai trung {@link #status} — day la rang buoc bat buoc cua hop dong API,
  * duoc kiem tra bang unit test chu khong dua vao mat nguoi.
  *
- * <p>Prefix theo module: AUTH, USR, TSK, MATCH, BKG, PAY, RVW, CHT, NTF, ADM, AI, MAP.
+ * <p>Prefix theo module: AUTH, USR, TSK, MATCH, BKG, PAY, RVW, CHT, NTF, ADM, AI.
  * Prefix {@code COMMON} danh cho loi ky thuat dung chung, khong thuoc module nao.
  *
  * <p>Them ma moi thi bo sung vao {@code docs/ERROR-CODES.md} cung luc, khong de ma song
@@ -150,6 +150,8 @@ public enum ErrorCode {
             "Khung giờ này trùng với một khung giờ rảnh khác đã khai báo trong cùng ngày."),
     SAVED_ADDRESS_NOT_FOUND("USR-404-SAVED_ADDRESS_NOT_FOUND", HttpStatus.NOT_FOUND,
             "Không tìm thấy địa chỉ đã lưu này."),
+    SAVED_ADDRESS_LIMIT_REACHED("USR-409-SAVED_ADDRESS_LIMIT_REACHED", HttpStatus.CONFLICT,
+            "Bạn chỉ có thể lưu tối đa 5 địa chỉ. Hãy xoá bớt địa chỉ cũ trước khi lưu địa chỉ mới."),
 
     // --- TSK ---
     MISSING_LOCATION("TSK-400-MISSING_LOCATION", HttpStatus.BAD_REQUEST,
@@ -180,6 +182,22 @@ public enum ErrorCode {
             "Không tìm thấy đơn ứng tuyển."),
     APPLICATION_NOT_PENDING("TSK-409-APPLICATION_NOT_PENDING", HttpStatus.CONFLICT,
             "Đơn ứng tuyển này đã được xử lý."),
+    APPLICATION_NOT_WITHDRAWABLE("TSK-409-APPLICATION_NOT_WITHDRAWABLE", HttpStatus.CONFLICT,
+            "Đơn ứng tuyển này không ở trạng thái có thể rút lại."),
+    APPLICATION_NOT_INQUIRING("TSK-409-APPLICATION_NOT_INQUIRING", HttpStatus.CONFLICT,
+            "Đơn này không ở trạng thái đang hỏi thêm."),
+    TASK_NOT_NEGOTIABLE("TSK-409-TASK_NOT_NEGOTIABLE", HttpStatus.CONFLICT,
+            "Không thể đề xuất giá cho công việc ở trạng thái này."),
+    MISSING_AGREED_PRICE("TSK-409-MISSING_AGREED_PRICE", HttpStatus.CONFLICT,
+            "Chưa có mức giá nào được thống nhất cho công việc này, không thể chọn ứng viên."),
+    INVITE_LIMIT_REACHED("TSK-409-INVITE_LIMIT_REACHED", HttpStatus.CONFLICT,
+            "Công việc này đã đạt giới hạn số lời mời đang chờ phản hồi."),
+    TASKER_DECLINED_PERMANENTLY("TSK-409-TASKER_DECLINED_PERMANENTLY", HttpStatus.CONFLICT,
+            "Tasker này đã từng từ chối lời mời cho công việc này, không thể mời lại."),
+    INVITE_EXPIRED("TSK-409-INVITE_EXPIRED", HttpStatus.CONFLICT,
+            "Lời mời này đã hết hạn."),
+    DIRECT_INVITES_DISABLED("TSK-403-DIRECT_INVITES_DISABLED", HttpStatus.FORBIDDEN,
+            "Tasker này đang tắt nhận lời mời trực tiếp."),
 
     // --- MATCH ---
     NO_TASKER_FOUND("MATCH-404-NO_TASKER_FOUND", HttpStatus.NOT_FOUND,
@@ -201,6 +219,14 @@ public enum ErrorCode {
     QUOTA_EXHAUSTED("AI-503-QUOTA_EXHAUSTED", HttpStatus.SERVICE_UNAVAILABLE,
             "Hệ thống gợi ý AI tạm thời hết lượt dùng trong ngày."),
 
+    // --- BKG ---
+    PRICE_PROPOSAL_PENDING("BKG-409-PRICE_PROPOSAL_PENDING", HttpStatus.CONFLICT,
+            "Đang có một đề xuất giá chờ xử lý, cần giải quyết xong trước khi tiếp tục."),
+    BOOKING_NOT_FOUND("BKG-404-BOOKING_NOT_FOUND", HttpStatus.NOT_FOUND,
+            "Không tìm thấy booking cho công việc này."),
+    RESCHEDULE_NOT_ALLOWED("BKG-409-RESCHEDULE_NOT_ALLOWED", HttpStatus.CONFLICT,
+            "Chỉ có thể đề xuất đổi lịch khi công việc đang được thực hiện."),
+
     // --- RVW ---
     TASK_NOT_COMPLETED("RVW-409-TASK_NOT_COMPLETED", HttpStatus.CONFLICT,
             "Chỉ đánh giá được khi công việc đã hoàn tất."),
@@ -208,6 +234,18 @@ public enum ErrorCode {
     // --- PAY ---
     INSUFFICIENT_BALANCE("PAY-402-INSUFFICIENT_BALANCE", HttpStatus.PAYMENT_REQUIRED,
             "Số dư ví không đủ để thực hiện giao dịch."),
+
+    // --- CHT ---
+    FORBIDDEN_CHANNEL("CHT-403-FORBIDDEN_CHANNEL", HttpStatus.FORBIDDEN,
+            "Bạn không có quyền xem kênh trò chuyện này."),
+    PROPOSAL_PENDING("CHT-409-PROPOSAL_PENDING", HttpStatus.CONFLICT,
+            "Đang có một đề xuất chờ xử lý trong kênh này."),
+    CANNOT_REVOKE_RESOLVED("CHT-409-CANNOT_REVOKE_RESOLVED", HttpStatus.CONFLICT,
+            "Đề xuất này đã được xử lý, không thể thu hồi."),
+    CHANNEL_CLOSED("CHT-409-CHANNEL_CLOSED", HttpStatus.CONFLICT,
+            "Kênh trò chuyện này đã đóng, không thể gửi thêm."),
+    WS_UNAUTHENTICATED("CHT-401-WS_UNAUTHENTICATED", HttpStatus.UNAUTHORIZED,
+            "Không xác thực được kết nối trò chuyện thời gian thực."),
 
     // --- MAP ---
     MAP_PROVIDER_ERROR("MAP-502-PROVIDER_ERROR", HttpStatus.BAD_GATEWAY,

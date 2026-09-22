@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -21,6 +22,7 @@ import vn.taskconnect.user.api.CertificationStatus;
 import vn.taskconnect.user.dto.request.CertificateUploadUrlRequest;
 import vn.taskconnect.user.dto.request.RejectCertificationRequest;
 import vn.taskconnect.user.dto.request.SubmitSkillRequest;
+import vn.taskconnect.user.dto.request.UpdateAcceptsDirectInvitesRequest;
 import vn.taskconnect.user.dto.response.CertificateUploadUrlResponse;
 import vn.taskconnect.user.dto.response.CertificationReviewResponse;
 import vn.taskconnect.user.dto.response.CertificationReviewSummaryResponse;
@@ -85,6 +87,17 @@ public class TaskerSkillController {
     public ApiResponse<List<CertificationReviewResponse>> getMyCertifications(
             @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID categoryId) {
         return ApiResponse.ok(skillService.getCertificationsForReview(principal.accountId(), categoryId));
+    }
+
+    /** Bat/tat cong tac nhan loi moi truc tiep (INVITED, UC09, Round B5) cho mot category. */
+    @PutMapping("/me/tasker-skills/{categoryId}/accepts-direct-invites")
+    @PreAuthorize("hasRole('TASKER')")
+    public ApiResponse<TaskerSkillResponse> updateAcceptsDirectInvites(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID categoryId,
+            @Valid @RequestBody UpdateAcceptsDirectInvitesRequest request) {
+        TaskerSkillResponse response = skillService.updateAcceptsDirectInvites(principal.accountId(), categoryId,
+                request);
+        return ApiResponse.ok(response, "Đã cập nhật cài đặt nhận lời mời trực tiếp.");
     }
 
     /**

@@ -11,7 +11,7 @@ import org.hibernate.type.SqlTypes;
 
 /**
  * Cache embedding vector cua mo ta mot Task, tinh mot lan va tai su dung cho moi lan goi y
- * Tasker cua task do (xem TaskerMatchingService/V26__create_matching_tables.sql). taskId la
+ * Tasker cua task do (xem TaskerMatchingService/V35__create_matching_tables.sql). taskId la
  * khoa chinh - moi Task chi co dung mot cache, khac TaskerProfileEmbedding (theo cap
  * account+category) vi mot Task chi thuoc dung mot category/mo ta duy nhat, khong can phan
  * biet them chieu nao khac.

@@ -31,7 +31,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/api/v1/auth/verify-email", new Rule(10, Duration.ofHours(1)),
             "/api/v1/auth/resend-verification", new Rule(5, Duration.ofHours(1)),
             "/api/v1/auth/forgot-password", new Rule(5, Duration.ofHours(1)),
-            "/api/v1/auth/reset-password", new Rule(10, Duration.ofHours(1))
+            "/api/v1/auth/reset-password", new Rule(10, Duration.ofHours(1)),
+            // Endpoint da dang nhap nhung co the bi loi dung de do so dien thoai da dang ky
+            // hay chua (enumeration) - xem AuthController.checkPhoneAvailable().
+            "/api/v1/auth/me/phone/check", new Rule(10, Duration.ofHours(1))
     );
 
     private final RateLimiter rateLimiter;

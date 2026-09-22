@@ -1,5 +1,6 @@
 package vn.taskconnect.user.api;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -32,6 +33,23 @@ public interface UserFacade {
      * (khong ghi de len du lieu da ton tai).
      */
     void createInitialProfile(UUID accountId, String fullName);
+
+    /**
+     * Tasker co dang cho phep nhan loi moi truc tiep (INVITED, UC09) cho category nay khong.
+     * Tra ve false neu Tasker chua tung khai bao ho so ky nang cho category nay (khong co
+     * profile de moi vao). Dung boi Task khi Poster moi truc tiep 1 Tasker.
+     */
+    boolean acceptsDirectInvites(UUID accountId, UUID categoryId);
+
+    /**
+     * Xoa hang loat ho so ca nhan theo danh sach accountId. Dung boi Auth
+     * (AuthAccountCleanupService) de don du lieu phu thuoc truoc khi xoa chinh tai khoan
+     * UNVERIFIED qua han - tranh loi FK RESTRICT tu fk_user_profiles_account (khong khai
+     * bao ON DELETE CASCADE). Khong lam gi neu danh sach rong.
+     *
+     * @return so ho so da xoa, dung de ghi log
+     */
+    int deleteProfilesByAccountIds(Collection<UUID> accountIds);
 
     /**
      * Danh sach Tasker co ho so ky nang cho dung mot category, dung boi module Matching
