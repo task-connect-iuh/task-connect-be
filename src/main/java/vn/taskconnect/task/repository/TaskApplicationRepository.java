@@ -76,6 +76,19 @@ public interface TaskApplicationRepository extends JpaRepository<TaskApplication
      */
     List<TaskApplication> findByTaskIdInAndStatus(Collection<UUID> taskIds, TaskApplicationStatus status);
 
+    /**
+     * So don dang dung 1 trong nhieu trang thai cho 1 task - dung cho khoa Tang 2 cua UC07
+     * (TaskService.ACTIVE_STATUSES_ON_TASK_CANCEL: PENDING/INQUIRING/INVITED/
+     * TIME_CHANGED_NEEDS_RECONFIRM), RONG hon countByTaskIdAndStatus(PENDING) don thuan.
+     */
+    long countByTaskIdAndStatusIn(UUID taskId, Collection<TaskApplicationStatus> statuses);
+
+    /**
+     * Ban nhieu-trang-thai cua findByTaskIdInAndStatus - dung tinh budgetLocked hang loat cho
+     * GET /tasks/mine, tranh N+1 query so voi goi countByTaskIdAndStatusIn rieng cho tung task.
+     */
+    List<TaskApplication> findByTaskIdInAndStatusIn(Collection<UUID> taskIds, Collection<TaskApplicationStatus> statuses);
+
     /** Toan bo don dang dung 1 trang thai va da qua han - dung boi InviteExpirySweeperJob de quet loi moi INVITED qua expires_at. */
     List<TaskApplication> findByStatusAndExpiresAtBefore(TaskApplicationStatus status, Instant instant);
 }

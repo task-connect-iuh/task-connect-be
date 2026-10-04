@@ -1,6 +1,7 @@
 package vn.taskconnect.chat.service;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import vn.taskconnect.admin.api.AdminFacade;
 import vn.taskconnect.booking.api.BookingFacade;
 import vn.taskconnect.booking.api.dto.BookingSummary;
 import vn.taskconnect.chat.api.ChannelStatus;
@@ -22,19 +24,36 @@ import vn.taskconnect.chat.api.ChatMessageType;
 import vn.taskconnect.chat.api.ChatSystemMessages;
 import vn.taskconnect.chat.api.InboxTab;
 import vn.taskconnect.chat.api.ProposalStatus;
+import vn.taskconnect.chat.dto.request.ChatAttachmentUploadUrlRequest;
+import vn.taskconnect.chat.dto.request.SendAttachmentMessageRequest;
+import vn.taskconnect.chat.dto.response.ChatApplicationStatusResponse;
+import vn.taskconnect.chat.dto.response.ChatAttachmentResponse;
+import vn.taskconnect.chat.dto.response.ChatAttachmentUploadUrlResponse;
 import vn.taskconnect.chat.dto.response.ChatInboxItemResponse;
 import vn.taskconnect.chat.dto.response.ChatMessageResponse;
+import vn.taskconnect.chat.dto.response.ChatReactionResponse;
 import vn.taskconnect.chat.dto.response.InboxPingEvent;
+import vn.taskconnect.chat.dto.response.TaskEditDiffResponse;
 import vn.taskconnect.chat.entity.ChatChannel;
 import vn.taskconnect.chat.entity.ChatMessage;
+import vn.taskconnect.chat.entity.ChatMessageAttachment;
+import vn.taskconnect.chat.entity.ChatMessageReaction;
+import vn.taskconnect.chat.entity.ChatPinnedMessage;
 import vn.taskconnect.chat.repository.ChatChannelRepository;
+import vn.taskconnect.chat.repository.ChatMessageAttachmentRepository;
+import vn.taskconnect.chat.repository.ChatMessageReactionRepository;
 import vn.taskconnect.chat.repository.ChatMessageRepository;
+import vn.taskconnect.chat.repository.ChatPinnedMessageRepository;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
+import vn.taskconnect.common.storage.S3PresignedUploadService;
 import vn.taskconnect.task.api.TaskApplicationStatus;
 import vn.taskconnect.task.api.TaskFacade;
+import vn.taskconnect.task.api.TaskStatus;
+import vn.taskconnect.task.api.dto.ExtraCostBatchSummary;
 import vn.taskconnect.task.api.dto.PriceProposalCreated;
 import vn.taskconnect.task.api.dto.TaskApplicationParties;
+import vn.taskconnect.task.api.dto.TaskEditSummary;
 
 /**
  * Nghiep vu chinh cua module Chat (UC16): lazy-create kenh, gui/doc tin nhan, thuong luong
@@ -47,18 +66,41 @@ import vn.taskconnect.task.api.dto.TaskApplicationParties;
 @Service
 public class ChatService {
 
+    /** presigned GET cho anh/video/file dinh kem - ngan han, ky lai moi lan tra ve (xem toAttachmentResponse). */
+    private static final Duration ATTACHMENT_GET_URL_TTL = Duration.ofMinutes(15);
+
+    /** Cac loai tin nhan co the thu hoi - KHONG bao gom SYSTEM (khong co nguoi gui) va PRICE_PROPOSAL/
+     * RESCHEDULE_PROPOSAL (da co co che Thu hoi rieng gan voi proposalStatus, xem withdraw*()). */
+    private static final Set<ChatMessageType> RECALLABLE_MESSAGE_TYPES = EnumSet.of(
+            ChatMessageType.TEXT, ChatMessageType.IMAGE, ChatMessageType.FILE, ChatMessageType.VIDEO,
+            ChatMessageType.VOICE);
+
     private final ChatChannelRepository channelRepository;
     private final ChatMessageRepository messageRepository;
+    private final ChatMessageAttachmentRepository attachmentRepository;
+    private final ChatMessageReactionRepository reactionRepository;
+    private final ChatPinnedMessageRepository pinnedMessageRepository;
+    private final ChatAttachmentUploadService attachmentUploadService;
+    private final S3PresignedUploadService s3Service;
+    private final AdminFacade adminFacade;
     private final TaskFacade taskFacade;
     private final BookingFacade bookingFacade;
     private final SimpMessagingTemplate messagingTemplate;
     private final Clock clock;
 
     public ChatService(ChatChannelRepository channelRepository, ChatMessageRepository messageRepository,
-            TaskFacade taskFacade, BookingFacade bookingFacade, SimpMessagingTemplate messagingTemplate,
-            Clock clock) {
+            ChatMessageAttachmentRepository attachmentRepository, ChatMessageReactionRepository reactionRepository,
+            ChatPinnedMessageRepository pinnedMessageRepository, ChatAttachmentUploadService attachmentUploadService,
+            S3PresignedUploadService s3Service, AdminFacade adminFacade, TaskFacade taskFacade,
+            BookingFacade bookingFacade, SimpMessagingTemplate messagingTemplate, Clock clock) {
         this.channelRepository = channelRepository;
         this.messageRepository = messageRepository;
+        this.attachmentRepository = attachmentRepository;
+        this.reactionRepository = reactionRepository;
+        this.pinnedMessageRepository = pinnedMessageRepository;
+        this.attachmentUploadService = attachmentUploadService;
+        this.s3Service = s3Service;
+        this.adminFacade = adminFacade;
         this.taskFacade = taskFacade;
         this.bookingFacade = bookingFacade;
         this.messagingTemplate = messagingTemplate;
@@ -69,15 +111,167 @@ public class ChatService {
      * Gui 1 tin nhan TEXT. Lazy-create kenh + SYSTEM message mo dau (backdate ve
      * application.createdAt) neu day la lan gui dau tien cho application nay (dac ta muc 2).
      * 403 neu senderAccountId khong phai Poster/Tasker cua application, 409 neu kenh da CLOSED.
+     * replyToMessageId tuy chon (them 2026-09-26) - tra loi (quote) 1 tin nhan khac cung kenh,
+     * xem validateReplyTarget().
      */
     @Transactional
-    public ChatMessageResponse sendTextMessage(UUID applicationId, UUID senderAccountId, String text) {
+    public ChatMessageResponse sendTextMessage(UUID applicationId, UUID senderAccountId, String text,
+            UUID replyToMessageId) {
         TaskApplicationParties parties = requireParties(applicationId);
         requireParty(parties, senderAccountId);
+        UUID validReplyTo = validateReplyTarget(applicationId, replyToMessageId);
         taskFacade.clearInviteExpiryIfInvited(applicationId, senderAccountId);
         ChatChannel channel = requireOpenChannelLazyCreate(parties);
-        ChatMessage message = messageRepository.save(
-                ChatMessage.text(UUID.randomUUID(), channel.getId(), senderAccountId, text, clock.instant()));
+        ChatMessage message = messageRepository.save(ChatMessage.text(UUID.randomUUID(), channel.getId(),
+                senderAccountId, text, validReplyTo, clock.instant()));
+        ChatMessageResponse response = toResponse(message, parties);
+        publish(parties, response);
+        return response;
+    }
+
+    /**
+     * Xin 1 presigned PUT URL de tu tai 1 anh/video/file len S3 truoc khi gui tin nhan dinh kem
+     * (them 2026-09-26) - xem ChatAttachmentUploadService. Khong doi hoi kenh da ton tai (giong
+     * cac thao tac gui khac, kenh chi lazy-create luc THAT SU gui tin).
+     */
+    @Transactional(readOnly = true)
+    public ChatAttachmentUploadUrlResponse createAttachmentUploadUrl(UUID applicationId, UUID requesterAccountId,
+            ChatAttachmentUploadUrlRequest request) {
+        TaskApplicationParties parties = requireParties(applicationId);
+        requireParty(parties, requesterAccountId);
+        return attachmentUploadService.createUploadUrl(applicationId, request);
+    }
+
+    /**
+     * Tao 1 tin nhan IMAGE/FILE/VIDEO SAU KHI client da PUT xong tung file len S3 (them
+     * 2026-09-26). Kiem tra so luong/dung luong khai bao so voi nguong doc tu AdminFacade
+     * (khong xac minh lai noi dung that voi S3, cung han che voi ADR-003/004), lazy-create kenh
+     * neu can, luu 1 dong chat_messages + N dong chat_message_attachments (dung thu tu client gui).
+     */
+    @Transactional
+    public ChatMessageResponse sendAttachmentMessage(UUID applicationId, UUID senderAccountId,
+            SendAttachmentMessageRequest request) {
+        TaskApplicationParties parties = requireParties(applicationId);
+        requireParty(parties, senderAccountId);
+        ChatMessageType type = request.messageType();
+        if (type != ChatMessageType.IMAGE && type != ChatMessageType.FILE && type != ChatMessageType.VIDEO
+                && type != ChatMessageType.VOICE) {
+            throw new BusinessException(ErrorCode.UNSUPPORTED_ATTACHMENT_TYPE);
+        }
+        validateAttachmentLimits(type, request.attachments());
+        UUID validReplyTo = validateReplyTarget(applicationId, request.replyToMessageId());
+        taskFacade.clearInviteExpiryIfInvited(applicationId, senderAccountId);
+        ChatChannel channel = requireOpenChannelLazyCreate(parties);
+        Instant now = clock.instant();
+        UUID messageId = UUID.randomUUID();
+        ChatMessage message = messageRepository.save(ChatMessage.attachmentMessage(messageId, channel.getId(),
+                senderAccountId, type, request.caption(), validReplyTo, now));
+        int order = 0;
+        for (SendAttachmentMessageRequest.AttachmentInput input : request.attachments()) {
+            attachmentRepository.save(ChatMessageAttachment.of(UUID.randomUUID(), messageId, input.objectKey(),
+                    input.fileName(), input.mimeType(), input.fileSizeBytes(), order++, now));
+        }
+        ChatMessageResponse response = toResponse(message, parties);
+        publish(parties, response);
+        return response;
+    }
+
+    /**
+     * Chinh nguoi gui Thu hoi 1 tin nhan TEXT/IMAGE/FILE/VIDEO cua chinh minh, trong han thoi
+     * gian doc tu AdminFacade (mac dinh 15 phut) - them 2026-09-26. Thu hoi la MEM (khong xoa
+     * du lieu that, xem Javadoc ChatMessage.markRecalled) va AP DUNG VOI CA HAI BEN (ca nguoi
+     * gui lan nguoi nhan deu thay dong thay the sau khi thu hoi - rule da chot voi nguoi dung).
+     * Neu tin dang duoc ghim, tu dong bo ghim (khong con noi dung de ghim).
+     */
+    @Transactional
+    public ChatMessageResponse recallMessage(UUID applicationId, UUID messageId, UUID actingAccountId) {
+        TaskApplicationParties parties = requireParties(applicationId);
+        requireParty(parties, actingAccountId);
+        ChatMessage message = requireMessageInChannel(applicationId, messageId);
+        if (!RECALLABLE_MESSAGE_TYPES.contains(message.getMessageType())) {
+            throw new BusinessException(ErrorCode.MESSAGE_NOT_RECALLABLE);
+        }
+        if (message.isRecalled()) {
+            throw new BusinessException(ErrorCode.MESSAGE_RECALLED);
+        }
+        if (!actingAccountId.equals(message.getSenderAccountId())) {
+            throw new BusinessException(ErrorCode.NOT_MESSAGE_SENDER);
+        }
+        Duration recallWindow = Duration.ofMinutes(adminFacade.getChatMessageRecallWindowMinutes());
+        if (Duration.between(message.getCreatedAt(), clock.instant()).compareTo(recallWindow) > 0) {
+            throw new BusinessException(ErrorCode.RECALL_WINDOW_EXPIRED);
+        }
+        message.markRecalled(clock.instant());
+        pinnedMessageRepository.deleteByMessageId(messageId);
+        ChatMessageResponse response = toResponse(message, parties);
+        publish(parties, response);
+        return response;
+    }
+
+    /**
+     * Tha/doi/bo mot emoji tren 1 tin nhan (them 2026-09-26) - toggle: chua tha thi tha moi, da
+     * tha emoji KHAC thi doi, da tha CUNG emoji thi bo tha. Toi da 1 reaction/tai khoan/tin nhan
+     * (UNIQUE trong V41).
+     */
+    @Transactional
+    public ChatMessageResponse reactToMessage(UUID applicationId, UUID messageId, UUID actingAccountId, String emoji) {
+        TaskApplicationParties parties = requireParties(applicationId);
+        requireParty(parties, actingAccountId);
+        ChatMessage message = requireMessageInChannel(applicationId, messageId);
+        if (message.isRecalled()) {
+            throw new BusinessException(ErrorCode.MESSAGE_RECALLED);
+        }
+        Instant now = clock.instant();
+        reactionRepository.findByMessageIdAndAccountId(messageId, actingAccountId).ifPresentOrElse(existing -> {
+            if (existing.getEmoji().equals(emoji)) {
+                reactionRepository.delete(existing);
+            } else {
+                existing.changeEmoji(emoji, now);
+            }
+        }, () -> reactionRepository.save(ChatMessageReaction.of(UUID.randomUUID(), messageId, actingAccountId, emoji, now)));
+        ChatMessageResponse response = toResponse(message, parties);
+        publish(parties, response);
+        return response;
+    }
+
+    /**
+     * Ghim 1 tin nhan vao kenh cua application (them 2026-09-26) - CA HAI ben (Poster/Tasker)
+     * deu ghim duoc, toi da N tin dong thoi/kenh (N doc tu AdminFacade, mac dinh 3). Idempotent
+     * neu tin da duoc ghim tu truoc (khong bao loi). Khoa PESSIMISTIC_WRITE tren ChatChannel de
+     * tranh 2 ben cung ghim vuot qua gioi han khi dang o dung nguong (xem
+     * ChatChannelRepository.findByIdForUpdate).
+     */
+    @Transactional
+    public ChatMessageResponse pinMessage(UUID applicationId, UUID messageId, UUID actingAccountId) {
+        TaskApplicationParties parties = requireParties(applicationId);
+        requireParty(parties, actingAccountId);
+        ChatMessage message = requireMessageInChannel(applicationId, messageId);
+        if (message.isRecalled()) {
+            throw new BusinessException(ErrorCode.MESSAGE_RECALLED);
+        }
+        channelRepository.findByIdForUpdate(message.getChannelId());
+        boolean alreadyPinned = pinnedMessageRepository.findByChannelIdOrderByCreatedAtAsc(message.getChannelId())
+                .stream().anyMatch(pinned -> pinned.getMessageId().equals(messageId));
+        if (!alreadyPinned) {
+            int limit = adminFacade.getChatMaxPinnedMessagesPerChannel();
+            if (pinnedMessageRepository.countByChannelId(message.getChannelId()) >= limit) {
+                throw new BusinessException(ErrorCode.PIN_LIMIT_REACHED);
+            }
+            pinnedMessageRepository.save(ChatPinnedMessage.of(UUID.randomUUID(), message.getChannelId(), messageId,
+                    actingAccountId, clock.instant()));
+        }
+        ChatMessageResponse response = toResponse(message, parties);
+        publish(parties, response);
+        return response;
+    }
+
+    /** Bo ghim 1 tin nhan (them 2026-09-26) - CA HAI ben ghim duoc thi CA HAI ben cung bo ghim duoc. No-op neu chua tung ghim. */
+    @Transactional
+    public ChatMessageResponse unpinMessage(UUID applicationId, UUID messageId, UUID actingAccountId) {
+        TaskApplicationParties parties = requireParties(applicationId);
+        requireParty(parties, actingAccountId);
+        ChatMessage message = requireMessageInChannel(applicationId, messageId);
+        pinnedMessageRepository.deleteByChannelIdAndMessageId(message.getChannelId(), messageId);
         ChatMessageResponse response = toResponse(message, parties);
         publish(parties, response);
         return response;
@@ -89,10 +283,59 @@ public class ChatService {
         TaskApplicationParties parties = requireParties(applicationId);
         requireParty(parties, requesterAccountId);
         return channelRepository.findByApplicationId(applicationId)
-                .map(channel -> messageRepository.findByChannelIdOrderByCreatedAtAsc(channel.getId()).stream()
-                        .map(message -> toResponse(message, parties))
-                        .toList())
+                .map(channel -> listMessagesOfChannel(channel, parties))
                 .orElse(List.of());
+    }
+
+    /**
+     * Chi tiet "truoc -> sua" cua 1 lan Poster sua cong viec (UC07), tra cuu tu 1 SYSTEM message
+     * co ref_task_edit_id - dung khi FE bam nut "Xem chi tiết thay đổi". Quyen xem kiem tra bang
+     * requireParty() nhu moi endpoint chat khac; du lieu that doc qua TaskFacade (cam JOIN
+     * xuyen module). 404 neu messageId khong thuoc kenh nay, hoac khong phai SYSTEM message sinh
+     * tu UC07 (refTaskEditId null), hoac su kien sua khong con ton tai.
+     */
+    @Transactional(readOnly = true)
+    public TaskEditDiffResponse getTaskEditOfMessage(UUID applicationId, UUID messageId, UUID actingAccountId) {
+        TaskApplicationParties parties = requireParties(applicationId);
+        requireParty(parties, actingAccountId);
+        ChatMessage message = requireMessageInChannel(applicationId, messageId);
+        UUID refTaskEditId = message.getRefTaskEditId();
+        if (refTaskEditId == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        TaskEditSummary summary = taskFacade.findTaskEdit(refTaskEditId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        List<TaskEditDiffResponse.Change> changes = summary.changes().stream()
+                .map(change -> new TaskEditDiffResponse.Change(change.field(), change.oldValue(), change.newValue()))
+                .toList();
+        return new TaskEditDiffResponse(summary.id(), summary.editedAt(), changes);
+    }
+
+    /**
+     * Nap toan bo tin nhan cua 1 kenh kem attachments/reactions/pin - nap gop theo tap messageId
+     * (3 truy van bulk) thay vi tung dong 1 truy van (tranh N+1 khi 1 kenh co nhieu tin, them
+     * 2026-09-26).
+     */
+    private List<ChatMessageResponse> listMessagesOfChannel(ChatChannel channel, TaskApplicationParties parties) {
+        List<ChatMessage> messages = messageRepository.findByChannelIdOrderByCreatedAtAsc(channel.getId());
+        if (messages.isEmpty()) {
+            return List.of();
+        }
+        List<UUID> messageIds = messages.stream().map(ChatMessage::getId).toList();
+        Map<UUID, List<ChatMessageAttachment>> attachmentsByMessage = attachmentRepository
+                .findByMessageIdInOrderBySortOrderAsc(messageIds).stream()
+                .collect(Collectors.groupingBy(ChatMessageAttachment::getMessageId));
+        Map<UUID, List<ChatMessageReaction>> reactionsByMessage = reactionRepository.findByMessageIdIn(messageIds)
+                .stream().collect(Collectors.groupingBy(ChatMessageReaction::getMessageId));
+        Map<UUID, ChatPinnedMessage> pinnedByMessage = pinnedMessageRepository
+                .findByChannelIdOrderByCreatedAtAsc(channel.getId()).stream()
+                .collect(Collectors.toMap(ChatPinnedMessage::getMessageId, pinned -> pinned));
+        return messages.stream()
+                .map(message -> assemble(message, parties, amountOf(message),
+                        attachmentsByMessage.getOrDefault(message.getId(), List.of()),
+                        reactionsByMessage.getOrDefault(message.getId(), List.of()),
+                        pinnedByMessage.get(message.getId())))
+                .toList();
     }
 
     /** Danh sach channel (Inbox) cua 1 tai khoan, loc theo tab, moi nhat truoc (dac ta muc 10). */
@@ -167,6 +410,44 @@ public class ChatService {
             }
             ChatMessage message = messageRepository
                     .save(ChatMessage.system(UUID.randomUUID(), channel.getId(), systemMessageBody, clock.instant()));
+            taskFacade.getApplicationParties(applicationId)
+                    .ifPresent(parties -> publish(parties, toResponse(message, parties)));
+        });
+    }
+
+    /**
+     * Nhu postSystemMessageIfOpen() nhung dinh kem id cua 1 su kien Poster sua cong viec (UC07)
+     * vao chat_messages.ref_task_edit_id, de FE hien nut "Xem chi tiết thay đổi" tren dung tin
+     * nay. No-op neu chua co kenh hoac kenh da CLOSED.
+     */
+    @Transactional
+    public void postTaskEditSystemMessageIfOpen(UUID applicationId, String systemMessageBody, UUID taskEditEventId) {
+        channelRepository.findByApplicationId(applicationId).ifPresent(channel -> {
+            if (channel.getStatus() != ChannelStatus.OPEN) {
+                return;
+            }
+            ChatMessage message = messageRepository.save(ChatMessage.taskEditSystem(UUID.randomUUID(),
+                    channel.getId(), systemMessageBody, taskEditEventId, clock.instant()));
+            taskFacade.getApplicationParties(applicationId)
+                    .ifPresent(parties -> publish(parties, toResponse(message, parties)));
+        });
+    }
+
+    /**
+     * Gui 1 tin nhan EXTRA_COST_BATCH vao kenh cua application (neu co va dang OPEN) ngay sau khi
+     * Tasker dang xong 1 batch "Chi phi phat sinh" (them 2026-10-03, thay the cho 1 dong SYSTEM
+     * text truoc day - yeu cau nguoi dung: hien nhu 1 the rieng trong khung chat, giong
+     * PRICE_PROPOSAL). No-op neu chua co kenh hoac kenh da CLOSED (khong nen xay ra - batch chi
+     * dang duoc khi task dang ASSIGNED, kenh chac chan da mo tu luc UC11 xac nhan ung vien).
+     */
+    @Transactional
+    public void postExtraCostBatchMessageIfOpen(UUID applicationId, UUID taskerAccountId, UUID extraCostBatchId) {
+        channelRepository.findByApplicationId(applicationId).ifPresent(channel -> {
+            if (channel.getStatus() != ChannelStatus.OPEN) {
+                return;
+            }
+            ChatMessage message = messageRepository.save(ChatMessage.extraCostBatch(UUID.randomUUID(),
+                    channel.getId(), taskerAccountId, extraCostBatchId, clock.instant()));
             taskFacade.getApplicationParties(applicationId)
                     .ifPresent(parties -> publish(parties, toResponse(message, parties)));
         });
@@ -365,15 +646,22 @@ public class ChatService {
      */
     private static final Set<TaskApplicationStatus> CHAT_TERMINAL_APPLICATION_STATUSES = EnumSet.of(
             TaskApplicationStatus.WITHDRAWN, TaskApplicationStatus.REJECTED, TaskApplicationStatus.REJECTED_AUTO,
-            TaskApplicationStatus.DECLINED, TaskApplicationStatus.INVITE_EXPIRED);
+            TaskApplicationStatus.DECLINED, TaskApplicationStatus.INVITE_EXPIRED,
+            // Them cho UC07: Poster huy ca cong viec (TaskService.cancelTask) cung dong kenh
+            // qua closeChannelIfExists() giong 5 trang thai tren.
+            TaskApplicationStatus.CANCELLED);
 
     /**
      * Lazy-create kenh neu chua co (dac ta muc 2), hoac tra ve kenh da co - 409 neu da CLOSED,
-     * hoac neu application da o 1 trong CHAT_TERMINAL_APPLICATION_STATUSES du kenh vat ly chua
-     * tung duoc tao (xem Javadoc hang so tren).
+     * neu application da o 1 trong CHAT_TERMINAL_APPLICATION_STATUSES du kenh vat ly chua tung
+     * duoc tao (xem Javadoc hang so tren), HOAC neu task cha da REJECTED (Admin tu choi hau
+     * kiem - xem TaskService.rejectFlaggedTask()): applicationStatus cua CHINH don khong doi khi
+     * Admin tu choi task (don van PENDING/INQUIRING/INVITED), nen phai kiem tra rieng qua
+     * taskStatus, khong the gop chung vao CHAT_TERMINAL_APPLICATION_STATUSES.
      */
     private ChatChannel requireOpenChannelLazyCreate(TaskApplicationParties parties) {
-        if (CHAT_TERMINAL_APPLICATION_STATUSES.contains(parties.status())) {
+        if (CHAT_TERMINAL_APPLICATION_STATUSES.contains(parties.status())
+                || parties.taskStatus() == TaskStatus.REJECTED) {
             throw new BusinessException(ErrorCode.CHANNEL_CLOSED);
         }
         ChatChannel channel = channelRepository.findByApplicationId(parties.applicationId())
@@ -441,6 +729,35 @@ public class ChatService {
     @Transactional
     public void openChannelForInvite(UUID applicationId, UUID posterAccountId, String systemMessageBody,
             Long proposedAmount, String proposalNote, Instant now) {
+        openChannelWithOptionalPriceProposal(applicationId, posterAccountId, systemMessageBody, proposedAmount,
+                proposalNote, now);
+    }
+
+    /**
+     * Tao kenh ngay khi Tasker ung tuyen kem "De nghi mot muc khac" (UC10, yeu cau nguoi dung
+     * 2026-09-30), kem 1 SYSTEM message va 1 PRICE_PROPOSAL luon di kem (khac
+     * openChannelForInvite - proposedAmount o day khong bao giat null, method nay chi duoc goi
+     * khi Tasker THAT SU dinh kem gia). Dung chung helper openChannelWithOptionalPriceProposal
+     * voi openChannelForInvite - hai luong deu la "lan dau tien co noi dung trong kenh nay", chi
+     * khac ai la nguoi de xuat (posterAccountId vs taskerAccountId).
+     */
+    @Transactional
+    public void openChannelForApplyWithPriceProposal(UUID applicationId, UUID taskerAccountId,
+            String systemMessageBody, long proposedAmount, String proposalNote, Instant now) {
+        openChannelWithOptionalPriceProposal(applicationId, taskerAccountId, systemMessageBody, proposedAmount,
+                proposalNote, now);
+    }
+
+    /**
+     * Logic dung chung cho openChannelForInvite/openChannelForApplyWithPriceProposal: lazy-create
+     * kenh (hoac tai su dung neu da co - phong ho, khong nen xay ra vi ca 2 luong deu goi tren 1
+     * applicationId vua tao), gui SYSTEM message mo dau, roi them 1 PRICE_PROPOSAL (qua
+     * TaskFacade.proposePrice, giong het luong thuong luong gia binh thuong) neu proposedAmount
+     * khac null. Khong kiem tra "dang co de xuat PROPOSED khac" nhu createPriceProposal(): day la
+     * lan dau tien co noi dung trong kenh nay nen khong the co de xuat nao truoc do.
+     */
+    private void openChannelWithOptionalPriceProposal(UUID applicationId, UUID proposerAccountId,
+            String systemMessageBody, Long proposedAmount, String proposalNote, Instant now) {
         ChatChannel channel = channelRepository.findByApplicationId(applicationId)
                 .orElseGet(() -> channelRepository.save(ChatChannel.open(UUID.randomUUID(), applicationId, now)));
 
@@ -448,10 +765,10 @@ public class ChatService {
                 .save(ChatMessage.system(UUID.randomUUID(), channel.getId(), systemMessageBody, now));
         Long amountForResponse = null;
         if (proposedAmount != null) {
-            PriceProposalCreated created = taskFacade.proposePrice(applicationId, posterAccountId, proposedAmount,
+            PriceProposalCreated created = taskFacade.proposePrice(applicationId, proposerAccountId, proposedAmount,
                     proposalNote);
             lastMessage = messageRepository.save(ChatMessage.priceProposal(UUID.randomUUID(), channel.getId(),
-                    posterAccountId, proposalNote, created.priceHistoryId(), now.plusMillis(1)));
+                    proposerAccountId, proposalNote, created.priceHistoryId(), now.plusMillis(1)));
             amountForResponse = proposedAmount;
         }
         ChatMessage toPublish = lastMessage;
@@ -529,30 +846,167 @@ public class ChatService {
         }
     }
 
-    /** Anh xa entity ChatMessage sang DTO tra ve client - tu doc amount tu TaskFacade neu la PRICE_PROPOSAL. */
-    private ChatMessageResponse toResponse(ChatMessage message, TaskApplicationParties parties) {
-        Long amount = message.getMessageType() == ChatMessageType.PRICE_PROPOSAL
+    /** Doc amount tu TaskFacade neu la PRICE_PROPOSAL, null cho cac loai con lai. */
+    private Long amountOf(ChatMessage message) {
+        return message.getMessageType() == ChatMessageType.PRICE_PROPOSAL
                 ? taskFacade.findPriceHistoryAmount(message.getRefPriceHistoryId()).orElse(null)
                 : null;
-        return toResponse(message, parties, amount);
     }
 
-    /** Ghi de toResponse() khi da san co amount (vd vua tao de xuat), tranh goi lai TaskFacade khong can thiet. */
+    /**
+     * Doc chi tiet batch "Chi phi phat sinh" tu TaskFacade neu la EXTRA_COST_BATCH, null cho cac
+     * loai con lai (them 2026-10-03) - LUON doc tuoi, khong cache, de status/items phan anh dung
+     * trang thai hien tai cua task_extra_cost_batches (xem Javadoc ChatMessageType.EXTRA_COST_BATCH).
+     */
+    private ExtraCostBatchSummary extraCostBatchOf(ChatMessage message) {
+        return message.getMessageType() == ChatMessageType.EXTRA_COST_BATCH
+                ? taskFacade.findExtraCostBatch(message.getRefExtraCostBatchId()).orElse(null)
+                : null;
+    }
+
+    /**
+     * Anh xa entity ChatMessage sang DTO tra ve client - dung cho cac thao tac tren TUNG tin nhan
+     * rieng le (gui/thu hoi/tha reaction/ghim...), tu truy van attachments/reactions/pin CUA
+     * DUNG tin nay (vai truy van nho, chap nhan duoc o quy mo 2 nguoi/kenh). Khi liet ke CA kenh,
+     * dung listMessagesOfChannel() (nap gop, tranh N+1) thay vi goi lap lai ham nay.
+     */
+    private ChatMessageResponse toResponse(ChatMessage message, TaskApplicationParties parties) {
+        return toResponse(message, parties, amountOf(message));
+    }
+
+    /** Nhu toResponse() nhung nhan san amount (vd vua tao de xuat, tranh goi lai TaskFacade khong can thiet). */
     private ChatMessageResponse toResponse(ChatMessage message, TaskApplicationParties parties, Long amount) {
+        List<ChatMessageAttachment> attachments = attachmentRepository
+                .findByMessageIdOrderBySortOrderAsc(message.getId());
+        List<ChatMessageReaction> reactions = reactionRepository.findByMessageIdIn(List.of(message.getId()));
+        ChatPinnedMessage pinned = pinnedMessageRepository.findByChannelIdOrderByCreatedAtAsc(message.getChannelId())
+                .stream().filter(p -> p.getMessageId().equals(message.getId())).findFirst().orElse(null);
+        return assemble(message, parties, amount, attachments, reactions, pinned);
+    }
+
+    /**
+     * Ghep 1 ChatMessage + du lieu lien quan (da nap san, tu toResponse() hoac
+     * listMessagesOfChannel()) thanh DTO tra ve client. Khi recalledAt khac null: body/
+     * attachments/reactions LUON rong/null trong response BAT KE du lieu that trong DB (thu hoi
+     * la mem, xem Javadoc ChatMessage.markRecalled) - dung cho ca hai ben (nguoi gui va nguoi
+     * nhan deu thay dong thay the, rule da chot voi nguoi dung 2026-09-26).
+     */
+    private ChatMessageResponse assemble(ChatMessage message, TaskApplicationParties parties, Long amount,
+            List<ChatMessageAttachment> attachments, List<ChatMessageReaction> reactions, ChatPinnedMessage pinned) {
         UUID senderId = message.getSenderAccountId();
         boolean fromPoster = senderId != null && senderId.equals(parties.posterId());
         String senderName = senderId == null ? null : fromPoster ? parties.posterName() : parties.taskerName();
         String senderAvatarUrl = senderId == null ? null
                 : fromPoster ? parties.posterAvatarUrl() : parties.taskerAvatarUrl();
+        boolean recalled = message.isRecalled();
+        List<ChatAttachmentResponse> attachmentResponses = recalled ? List.of()
+                : attachments.stream().map(this::toAttachmentResponse).toList();
+        List<ChatReactionResponse> reactionResponses = recalled ? List.of()
+                : reactions.stream()
+                        .map(r -> new ChatReactionResponse(r.getAccountId(), displayNameOf(parties, r.getAccountId()),
+                                r.getEmoji()))
+                        .toList();
+        String body = recalled ? null : message.getBody();
+        Instant recallableUntil = computeRecallableUntil(message);
+        Instant pinnedAt = pinned != null ? pinned.getCreatedAt() : null;
+        UUID pinnedByAccountId = pinned != null ? pinned.getPinnedByAccountId() : null;
+        String pinnedByName = pinned != null ? displayNameOf(parties, pinned.getPinnedByAccountId()) : null;
         return new ChatMessageResponse(message.getId(), message.getChannelId(), senderId, senderName,
-                senderAvatarUrl, message.getMessageType(), message.getBody(), message.getRefPriceHistoryId(),
-                amount, message.getProposedTime(), message.getProposalStatus(), message.getCreatedAt());
+                senderAvatarUrl, message.getMessageType(), body, message.getRefPriceHistoryId(), amount,
+                message.getProposedTime(), message.getProposalStatus(), message.getCreatedAt(), attachmentResponses,
+                message.getReplyToMessageId(), message.getRecalledAt(), recallableUntil, reactionResponses,
+                pinnedAt, pinnedByAccountId, pinnedByName, message.getRefTaskEditId(),
+                message.getRefExtraCostBatchId(), extraCostBatchOf(message));
     }
 
-    /** Anh xa 1 channel + parties + tin nhan gan nhat sang 1 dong Inbox, tinh vai tro dong theo accountId dang xem. */
+    /** Moc thoi gian con thu hoi duoc - null neu da bi thu hoi hoac khong thuoc loai thu hoi duoc (xem RECALLABLE_MESSAGE_TYPES). */
+    private Instant computeRecallableUntil(ChatMessage message) {
+        if (message.isRecalled() || !RECALLABLE_MESSAGE_TYPES.contains(message.getMessageType())) {
+            return null;
+        }
+        return message.getCreatedAt().plus(Duration.ofMinutes(adminFacade.getChatMessageRecallWindowMinutes()));
+    }
+
+    /** Anh xa 1 dong dinh kem sang DTO - ky MOI 1 presigned GET moi lan goi (prefix rieng tu, khong public-read). */
+    private ChatAttachmentResponse toAttachmentResponse(ChatMessageAttachment attachment) {
+        String url = s3Service.createPresignedGetUrl(attachment.getStorageKey(), ATTACHMENT_GET_URL_TTL);
+        return new ChatAttachmentResponse(url, attachment.getFileName(), attachment.getMimeType(),
+                attachment.getFileSizeBytes(), attachment.getSortOrder());
+    }
+
+    /** Lay dung 1 tin nhan (bat ky loai nao) thuoc dung kenh cua application - 404 neu khong khop. */
+    private ChatMessage requireMessageInChannel(UUID applicationId, UUID messageId) {
+        ChatChannel channel = channelRepository.findByApplicationId(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        ChatMessage message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        if (!message.getChannelId().equals(channel.getId())) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        return message;
+    }
+
+    /**
+     * Kiem tra 1 replyToMessageId (neu co) hop le: ton tai, cung kenh cua application, khong
+     * phai SYSTEM, chua bi thu hoi - tra ve nguyen id neu hop le, null neu dau vao la null.
+     */
+    private UUID validateReplyTarget(UUID applicationId, UUID replyToMessageId) {
+        if (replyToMessageId == null) {
+            return null;
+        }
+        ChatMessage target = requireMessageInChannel(applicationId, replyToMessageId);
+        if (target.getMessageType() == ChatMessageType.SYSTEM) {
+            throw new BusinessException(ErrorCode.CANNOT_REPLY_TO_SYSTEM);
+        }
+        if (target.isRecalled()) {
+            throw new BusinessException(ErrorCode.MESSAGE_RECALLED);
+        }
+        return replyToMessageId;
+    }
+
+    /**
+     * Kiem tra so luong file va dung luong khai bao cua tung file so voi nguong doc tu
+     * AdminFacade (theo dung "kind" IMAGE/VIDEO/FILE/VOICE) - KHONG xac minh lai dung luong that
+     * voi S3 (cung han che voi ADR-003/004, xem Javadoc ChatAttachmentUploadService). Rieng
+     * VOICE: thoi luong toi da (chat_voice_max_duration_seconds) KHONG duoc kiem tra o day - BE
+     * khong doc metadata audio, chi FE tu ngat ghi am dung nguong khi thu (xem
+     * VoiceRecorderButton.tsx).
+     */
+    private void validateAttachmentLimits(ChatMessageType type,
+            List<SendAttachmentMessageRequest.AttachmentInput> attachments) {
+        int maxCount = switch (type) {
+            case IMAGE -> adminFacade.getChatImageMaxCountPerMessage();
+            case VIDEO -> adminFacade.getChatVideoMaxCountPerMessage();
+            case FILE -> adminFacade.getChatFileMaxCountPerMessage();
+            case VOICE -> 1;
+            default -> 0;
+        };
+        long maxSizeBytes = switch (type) {
+            case IMAGE -> adminFacade.getChatImageMaxSizeMb() * 1024 * 1024;
+            case VIDEO -> adminFacade.getChatVideoMaxSizeMb() * 1024 * 1024;
+            case FILE -> adminFacade.getChatFileMaxSizeMb() * 1024 * 1024;
+            case VOICE -> adminFacade.getChatVoiceMaxSizeMb() * 1024 * 1024;
+            default -> 0;
+        };
+        if (attachments.isEmpty() || attachments.size() > maxCount) {
+            throw new BusinessException(ErrorCode.ATTACHMENT_LIMIT_EXCEEDED);
+        }
+        for (SendAttachmentMessageRequest.AttachmentInput input : attachments) {
+            if (input.fileSizeBytes() > maxSizeBytes) {
+                throw new BusinessException(ErrorCode.ATTACHMENT_LIMIT_EXCEEDED);
+            }
+        }
+    }
+
+    /**
+     * Anh xa 1 channel + parties + tin nhan gan nhat sang 1 dong Inbox, tinh vai tro dong theo
+     * accountId dang xem. paymentMethod chi doc qua BookingFacade (Chat -> Booking, dong bo, da
+     * cho phep san) khi channel.bookingId != null - tranh goi thua cho cac dong chua co booking.
+     */
     private ChatInboxItemResponse toInboxItem(ChatChannel channel, TaskApplicationParties parties,
             ChatMessage lastMessage, UUID viewerAccountId, boolean needsResponse) {
         boolean viewerIsPoster = viewerAccountId.equals(parties.posterId());
+        boolean hasBooking = channel.getBookingId() != null;
         return new ChatInboxItemResponse(
                 parties.applicationId(), channel.getId(), parties.taskId(), parties.taskTitle(),
                 viewerIsPoster ? parties.taskerId() : parties.posterId(),
@@ -564,13 +1018,46 @@ public class ChatService {
                 lastMessage != null ? lastMessage.getCreatedAt() : channel.getCreatedAt(),
                 needsResponse,
                 parties.status(),
-                channel.getBookingId() != null);
+                hasBooking,
+                parties.taskStatus(),
+                hasBooking ? bookingFacade.findByApplicationId(parties.applicationId())
+                        .map(BookingSummary::paymentMethod).orElse(null) : null);
     }
 
-    /** Doan xem truoc hien trong Inbox. */
+    /**
+     * Trang thai application + task cha cho 1 applicationId, KHONG doi hoi kenh vat ly da ton
+     * tai - dung khi FE mo mot cuoc tro chuyen chua tung co kenh (xem Javadoc
+     * ChatApplicationStatusResponse) de biet truoc co nen chan gui/hien thong bao truoc khi
+     * nguoi dung thu gui tin dau tien.
+     */
+    @Transactional(readOnly = true)
+    public ChatApplicationStatusResponse getApplicationChatStatus(UUID applicationId, UUID requesterAccountId) {
+        TaskApplicationParties parties = requireParties(applicationId);
+        requireParty(parties, requesterAccountId);
+        boolean viewerIsPoster = requesterAccountId.equals(parties.posterId());
+        return new ChatApplicationStatusResponse(
+                parties.applicationId(), parties.taskId(), parties.taskTitle(),
+                viewerIsPoster ? parties.taskerId() : parties.posterId(),
+                viewerIsPoster ? parties.taskerName() : parties.posterName(),
+                viewerIsPoster ? parties.taskerAvatarUrl() : parties.posterAvatarUrl(),
+                viewerIsPoster ? "POSTER" : "TASKER",
+                parties.status(), parties.taskStatus());
+    }
+
+    /**
+     * Doan xem truoc hien trong Inbox. Uu tien kiem tra thu hoi truoc (them 2026-09-26) - tin da
+     * thu hoi luon hien 1 dong co dinh, bat ke messageType goc la gi.
+     */
     private String previewOf(ChatMessage message) {
+        if (message.isRecalled()) {
+            return "Tin nhắn đã được thu hồi";
+        }
         return switch (message.getMessageType()) {
             case TEXT, SYSTEM -> message.getBody();
+            case IMAGE -> "Đã gửi hình ảnh";
+            case VIDEO -> "Đã gửi video";
+            case VOICE -> "Đã gửi tin nhắn thoại";
+            case FILE -> "Đã gửi file";
             case PRICE_PROPOSAL -> switch (message.getProposalStatus()) {
                 case PROPOSED -> "Đề xuất giá mới";
                 case ACCEPTED -> "Đã đồng ý mức giá";
@@ -581,6 +1068,7 @@ public class ChatService {
                 case ACCEPTED -> "Đã đồng ý đổi lịch";
                 case REJECTED -> "Đề xuất đổi lịch đã kết thúc";
             };
+            case EXTRA_COST_BATCH -> "Chi phí phát sinh";
         };
     }
 

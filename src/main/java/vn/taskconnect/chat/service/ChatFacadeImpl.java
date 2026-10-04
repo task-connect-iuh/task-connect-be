@@ -42,6 +42,16 @@ class ChatFacadeImpl implements ChatFacade {
     }
 
     @Override
+    public void postTaskEditSystemMessageIfOpen(UUID applicationId, String systemMessageBody, UUID taskEditEventId) {
+        chatService.postTaskEditSystemMessageIfOpen(applicationId, systemMessageBody, taskEditEventId);
+    }
+
+    @Override
+    public void postExtraCostBatchMessageIfOpen(UUID applicationId, UUID taskerAccountId, UUID extraCostBatchId) {
+        chatService.postExtraCostBatchMessageIfOpen(applicationId, taskerAccountId, extraCostBatchId);
+    }
+
+    @Override
     public boolean hasPendingProposal(UUID applicationId, ChatMessageType type) {
         return chatService.hasPendingProposal(applicationId, type);
     }
@@ -66,5 +76,12 @@ class ChatFacadeImpl implements ChatFacade {
             Long proposedAmount, String proposalNote, Instant now) {
         chatService.openChannelForInvite(applicationId, posterAccountId, systemMessageBody, proposedAmount,
                 proposalNote, now);
+    }
+
+    @Override
+    public void openChannelForApplyWithPriceProposal(UUID applicationId, UUID taskerAccountId,
+            String systemMessageBody, long proposedAmount, String proposalNote, Instant now) {
+        chatService.openChannelForApplyWithPriceProposal(applicationId, taskerAccountId, systemMessageBody,
+                proposedAmount, proposalNote, now);
     }
 }

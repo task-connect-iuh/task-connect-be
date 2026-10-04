@@ -15,6 +15,7 @@ import org.springframework.util.StringUtils;
 import vn.taskconnect.auth.api.AuthFacade;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
+import vn.taskconnect.user.api.AvailabilityMode;
 import vn.taskconnect.user.api.LocationType;
 import vn.taskconnect.user.api.SkillVerificationStatus;
 import vn.taskconnect.user.dto.request.UpdateProfileRequest;
@@ -147,7 +148,7 @@ public class UserProfileService {
         UserProfile profile = new UserProfile(UUID.randomUUID(), accountId, fullName, operatingArea, now);
         profile.updateDetails(fullName, request.avatarUrl(), request.addressText(), request.bio(), operatingArea,
                 request.locationLat(), request.locationLng(), request.preferredRadiusKm(), request.locationType(),
-                request.arrivalNotes(), now);
+                request.arrivalNotes(), request.availabilityMode(), now);
         try {
             return profileRepository.saveAndFlush(profile);
         } catch (DataIntegrityViolationException ex) {
@@ -202,6 +203,7 @@ public class UserProfileService {
         Integer preferredRadiusKm = request.preferredRadiusKm() != null ? request.preferredRadiusKm() : profile.getPreferredRadiusKm();
         LocationType locationType = request.locationType() != null ? request.locationType() : profile.getLocationType();
         String arrivalNotes = request.arrivalNotes() != null ? request.arrivalNotes() : profile.getArrivalNotes();
+        AvailabilityMode availabilityMode = request.availabilityMode() != null ? request.availabilityMode() : profile.getAvailabilityMode();
 
         if (Objects.equals(fullName, profile.getFullName()) && Objects.equals(avatarUrl, profile.getAvatarUrl())
                 && Objects.equals(addressText, profile.getAddressText())
@@ -211,12 +213,13 @@ public class UserProfileService {
                 && isSameNumericValue(locationLng, profile.getLocationLng())
                 && Objects.equals(preferredRadiusKm, profile.getPreferredRadiusKm())
                 && Objects.equals(locationType, profile.getLocationType())
-                && Objects.equals(arrivalNotes, profile.getArrivalNotes())) {
+                && Objects.equals(arrivalNotes, profile.getArrivalNotes())
+                && Objects.equals(availabilityMode, profile.getAvailabilityMode())) {
             return profile;
         }
 
         profile.updateDetails(fullName, avatarUrl, addressText, bio, operatingArea, locationLat, locationLng,
-                preferredRadiusKm, locationType, arrivalNotes, now);
+                preferredRadiusKm, locationType, arrivalNotes, availabilityMode, now);
         return profileRepository.save(profile);
     }
 

@@ -1,10 +1,13 @@
 package vn.taskconnect.task.api;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import vn.taskconnect.task.api.dto.ExtraCostBatchSummary;
 import vn.taskconnect.task.api.dto.PriceProposalCreated;
 import vn.taskconnect.task.api.dto.TaskApplicationParties;
+import vn.taskconnect.task.api.dto.TaskEditSummary;
 import vn.taskconnect.task.api.dto.TaskSummary;
 
 /**
@@ -75,4 +78,30 @@ public interface TaskFacade {
      * Khong lam gi trong moi truong hop khac, an toan de goi bat ky luc nao.
      */
     void clearInviteExpiryIfInvited(UUID applicationId, UUID actingAccountId);
+
+    /**
+     * Chi tiet 1 lan Poster sua cong viec (UC07) - dung boi Chat khi nguoi dung bam "Xem chi
+     * tiet thay doi" tren SYSTEM message. Rong neu id khong ton tai. KHONG tu kiem tra quyen xem
+     * o day - Chat da tu xac dinh nguoi goi la 1 trong 2 ben cua channel truoc khi goi (giong
+     * convention cua findPriceHistoryAmount).
+     */
+    Optional<TaskEditSummary> findTaskEdit(UUID taskEditEventId);
+
+    /**
+     * Dong bo scheduledAt cua Task theo gio moi vua duoc dong y qua RESCHEDULE_PROPOSAL (UC16
+     * muc 9, sau ASSIGNED) - dung boi Booking ngay sau BookingFacade.acceptReschedule() de
+     * Task.scheduledAt luon la nguon duy nhat phan anh "gio dang hen" hien tai, khong lech voi
+     * Booking.scheduledAt. Khong lien quan UC07 (Poster tu sua truoc ASSIGNED) - khong tao
+     * TaskEditEvent, khong kiem tra quyen (Booking da tu dam bao goi dung ngu canh).
+     */
+    void syncScheduledAt(UUID taskId, Instant scheduledAt);
+
+    /**
+     * Chi tiet 1 batch "Chi phi phat sinh" theo id - dung boi Chat de hien tin nhan
+     * EXTRA_COST_BATCH ngay trong khung chat (giong co che refPriceHistoryId/
+     * findPriceHistoryAmount cho PRICE_PROPOSAL, bo sung 2026-10-03). Rong neu batchId khong ton
+     * tai. Khong tu kiem tra quyen xem o day - Chat da tu xac dinh nguoi goi la 1 trong 2 ben cua
+     * channel truoc khi goi toi day (giong convention cua findPriceHistoryAmount/findTaskEdit).
+     */
+    Optional<ExtraCostBatchSummary> findExtraCostBatch(UUID batchId);
 }

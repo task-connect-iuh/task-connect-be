@@ -12,12 +12,22 @@ import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.task.api.TaskApplicationStatus;
 import vn.taskconnect.task.api.TaskFacade;
 import vn.taskconnect.task.api.TaskStatus;
+import vn.taskconnect.task.api.TaskEditableField;
+import vn.taskconnect.task.api.dto.ExtraCostBatchSummary;
 import vn.taskconnect.task.api.dto.PriceProposalCreated;
 import vn.taskconnect.task.api.dto.TaskApplicationParties;
+import vn.taskconnect.task.api.dto.TaskEditSummary;
 import vn.taskconnect.task.api.dto.TaskSummary;
 import vn.taskconnect.task.entity.Task;
 import vn.taskconnect.task.entity.TaskApplication;
+import vn.taskconnect.task.entity.TaskEditChange;
+import vn.taskconnect.task.entity.TaskEditEvent;
+import vn.taskconnect.task.entity.TaskExtraCostBatch;
 import vn.taskconnect.task.repository.TaskApplicationRepository;
+import vn.taskconnect.task.repository.TaskEditChangeRepository;
+import vn.taskconnect.task.repository.TaskEditEventRepository;
+import vn.taskconnect.task.repository.TaskExtraCostBatchRepository;
+import vn.taskconnect.task.repository.TaskExtraCostItemRepository;
 import vn.taskconnect.task.repository.TaskRepository;
 import vn.taskconnect.user.api.UserFacade;
 import vn.taskconnect.user.api.dto.UserProfileSummary;
@@ -32,14 +42,24 @@ class TaskFacadeImpl implements TaskFacade {
 
     private final TaskRepository taskRepository;
     private final TaskApplicationRepository applicationRepository;
+    private final TaskEditEventRepository editEventRepository;
+    private final TaskEditChangeRepository editChangeRepository;
+    private final TaskExtraCostBatchRepository extraCostBatchRepository;
+    private final TaskExtraCostItemRepository extraCostItemRepository;
     private final UserFacade userFacade;
     private final TaskPriceNegotiationService priceNegotiationService;
     private final Clock clock;
 
     TaskFacadeImpl(TaskRepository taskRepository, TaskApplicationRepository applicationRepository,
+            TaskEditEventRepository editEventRepository, TaskEditChangeRepository editChangeRepository,
+            TaskExtraCostBatchRepository extraCostBatchRepository, TaskExtraCostItemRepository extraCostItemRepository,
             UserFacade userFacade, TaskPriceNegotiationService priceNegotiationService, Clock clock) {
         this.taskRepository = taskRepository;
         this.applicationRepository = applicationRepository;
+        this.editEventRepository = editEventRepository;
+        this.editChangeRepository = editChangeRepository;
+        this.extraCostBatchRepository = extraCostBatchRepository;
+        this.extraCostItemRepository = extraCostItemRepository;
         this.userFacade = userFacade;
         this.priceNegotiationService = priceNegotiationService;
         this.clock = clock;
@@ -139,6 +159,60 @@ class TaskFacadeImpl implements TaskFacade {
         });
     }
 
+    /**
+     * Chi tiet 1 lan Poster sua cong viec (UC07) - dung boi Chat khi nguoi dung bam "Xem chi
+     * tiet thay doi" tren SYSTEM message. Khong tu kiem tra quyen xem o day - Chat da tu xac
+     * dinh nguoi goi la 1 trong 2 ben cua channel truoc khi goi toi day.
+     */
+    @Override
+    public Optional<TaskEditSummary> findTaskEdit(UUID taskEditEventId) {
+        return editEventRepository.findById(taskEditEventId).map(event -> {
+            List<TaskEditSummary.Change> changes = editChangeRepository
+                    .findByEventIdOrderBySortOrderAsc(event.getId()).stream()
+                    .map(this::toChange)
+                    .toList();
+            return new TaskEditSummary(event.getId(), event.getTaskId(), event.getCreatedAt(), changes);
+        });
+    }
+
+    /**
+     * Dong bo scheduledAt cua Task sau khi Booking chap nhan 1 RESCHEDULE_PROPOSAL (UC16 muc 9) -
+     * xem Javadoc TaskFacade.syncScheduledAt(). No-op an toan neu taskId khong ton tai (khong nem
+     * loi - Booking la nguon goi, khong can Task xac nhan lai su ton tai truoc do).
+     */
+    @Override
+    @Transactional
+    public void syncScheduledAt(UUID taskId, Instant scheduledAt) {
+        taskRepository.findById(taskId)
+                .ifPresent(task -> task.syncScheduledAtFromBooking(scheduledAt, clock.instant()));
+    }
+
+    /**
+     * Doc 1 batch "Chi phi phat sinh" + danh sach khoan cua no, anh xa sang DTO cong khai -
+     * dung boi Chat de hien tin nhan EXTRA_COST_BATCH (bo sung 2026-10-03). Khong tu kiem tra
+     * quyen xem, cung convention voi findTaskEdit()/findPriceHistoryAmount() o tren.
+     */
+    @Override
+    public Optional<ExtraCostBatchSummary> findExtraCostBatch(UUID batchId) {
+        return extraCostBatchRepository.findById(batchId).map(this::toExtraCostBatchSummary);
+    }
+
+    /** Anh xa TaskExtraCostBatch + danh sach khoan cua no sang ExtraCostBatchSummary cong khai. */
+    private ExtraCostBatchSummary toExtraCostBatchSummary(TaskExtraCostBatch batch) {
+        List<ExtraCostBatchSummary.Item> items = extraCostItemRepository
+                .findByBatchIdOrderBySortOrderAsc(batch.getId()).stream()
+                .map(item -> new ExtraCostBatchSummary.Item(item.getName(), item.getAmount(), item.getPhotoUrl()))
+                .toList();
+        return new ExtraCostBatchSummary(batch.getId(), batch.getBatchNo(), batch.getStatus(), batch.getNote(),
+                items, batch.getTotalAmount(), batch.getSubmittedAt(), batch.getReviewedAt());
+    }
+
+    /** Anh xa 1 dong TaskEditChange sang DTO cong khai. */
+    private TaskEditSummary.Change toChange(TaskEditChange change) {
+        TaskEditableField field = change.getField();
+        return new TaskEditSummary.Change(field, change.getOldValue(), change.getNewValue());
+    }
+
     /** Anh xa entity TaskApplication + Task sang DTO cong khai TaskApplicationParties, giai quyet ten qua UserFacade. */
     private TaskApplicationParties toParties(TaskApplication application, Task task) {
         UserProfileSummary poster = userFacade.findProfile(task.getPosterId()).orElse(null);
@@ -149,6 +223,6 @@ class TaskFacadeImpl implements TaskFacade {
                 poster != null ? poster.avatarUrl() : null,
                 application.getTaskerId(), tasker != null ? tasker.fullName() : null,
                 tasker != null ? tasker.avatarUrl() : null,
-                application.getStatus(), application.getCreatedAt());
+                application.getStatus(), application.getCreatedAt(), task.getStatus());
     }
 }

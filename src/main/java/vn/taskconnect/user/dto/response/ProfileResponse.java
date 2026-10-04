@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 import vn.taskconnect.auth.api.dto.AccountSummary;
+import vn.taskconnect.user.api.AvailabilityMode;
 import vn.taskconnect.user.api.KycStatus;
 import vn.taskconnect.user.api.LocationType;
 import vn.taskconnect.user.entity.UserProfile;
@@ -30,7 +31,8 @@ public record ProfileResponse(
         List<UUID> jobCategoryIds,
         KycStatus kycStatus,
         String email,
-        String phone
+        String phone,
+        AvailabilityMode availabilityMode
 ) {
 
     /** Chuyen entity sang DTO tra ve qua API, tranh entity JPA lo ra ngoai lop controller. */
@@ -50,6 +52,7 @@ public record ProfileResponse(
                 jobCategoryIds,
                 profile.getKycStatus(),
                 account != null ? account.email() : null,
-                account != null ? account.phone() : null);
+                account != null ? account.phone() : null,
+                profile.getAvailabilityMode());
     }
 }
