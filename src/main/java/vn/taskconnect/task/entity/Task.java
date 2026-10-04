@@ -17,10 +17,10 @@ import vn.taskconnect.task.api.TaskStatus;
 import vn.taskconnect.user.api.LocationType;
 
 /**
- * Mot cong viec do Task Poster dang. Xem V18__create_task_tables.sql. Dot 1 (dang viec toi
- * gian) chi ho tro tao va doc - khong co method chuyen trang thai nao khac ngoai createOpen()
- * (sua/huy UC07, giao viec UC11 se them method rieng, theo dung mau
- * KycVerification.approve()/reject() khi lam dot do). addressText/lat/lng/locationType/
+ * Mot cong viec do Task Poster dang. Xem V18__create_task_tables.sql. Ho tro tao, doc, va tu
+ * UC07 (xem cancelByPoster()/updateEditableFields()) sua/huy khi con OPEN/PENDING_REVIEW -
+ * dieu kien hop le kiem tra o TaskService, khong validate lai trong entity (cung convention voi
+ * KycVerification.approve()/reject()). addressText/lat/lng/locationType/
  * arrivalNotes la thong tin noi CAN THUC HIEN cong viec, hoan toan doc lap voi cac truong
  * cung ten cua user_profiles - FE dien san tu ho so luc mo form dang viec (xem V24) nhung
  * khong tham chieu qua lai sau do. LocationType tai su dung enum cua module User qua goi
@@ -211,6 +211,47 @@ public class Task {
         this.rejectionReason = rejectionReason;
         this.reviewedByAdminId = adminId;
         this.reviewedAt = now;
+        this.updatedAt = now;
+    }
+
+    /**
+     * Poster tu huy cong viec cua chinh minh (UC07) - chi goi khi status dang OPEN/PENDING_REVIEW,
+     * dieu kien kiem tra o TaskService.cancelTask (cung convention voi KycVerification.approve()).
+     */
+    public void cancelByPoster(Instant now) {
+        this.status = TaskStatus.CANCELLED;
+        this.updatedAt = now;
+    }
+
+    /**
+     * Ghi de toan bo nhom truong SUA DUOC cua UC07 (thay the hoan toan, null nghia la xoa gia
+     * tri hien co - vd budgetAmount null = "thoa thuan"). title/description/anh/addressText/
+     * lat/lng/categoryId/estimatedWorkersNeeded KHOA CUNG VINH VIEN - khong nam trong chu ky
+     * nay. Khoa Tier 2 (dang co don PENDING) va dieu kien status (con OPEN/PENDING_REVIEW) kiem
+     * tra o TaskService.updateTask, khong validate lai trong entity.
+     */
+    public void updateEditableFields(LocationType locationType, String arrivalNotes,
+            SuppliesStatus suppliesStatus, String suppliesNote, Long budgetAmount, Instant scheduledAt,
+            Instant now) {
+        this.locationType = locationType;
+        this.arrivalNotes = arrivalNotes;
+        this.suppliesStatus = suppliesStatus;
+        this.suppliesNote = suppliesNote;
+        this.budgetAmount = budgetAmount;
+        this.scheduledAt = scheduledAt;
+        this.updatedAt = now;
+    }
+
+    /**
+     * Dong bo scheduledAt tu Booking sau khi 1 RESCHEDULE_PROPOSAL duoc Dong y (UC16 muc 9, sau
+     * ASSIGNED) - goi tu BookingFacadeImpl.acceptReschedule() qua TaskFacade.syncScheduledAt(),
+     * KHONG qua duong UC07 (updateEditableFields) vi da qua ASSIGNED, Poster khong con tu sua
+     * duoc nua. Giu scheduledAt cua Task la nguon DUY NHAT phan anh "gio dang hen" xuyen suot
+     * vong doi - moi noi hien thi (MyTasksPage, TaskerJobsPage, khung chat...) deu doc field nay,
+     * khong can biet gi ve Booking. Khong ghi TaskEditEvent/TaskEditChange (khong phai UC07).
+     */
+    public void syncScheduledAtFromBooking(Instant scheduledAt, Instant now) {
+        this.scheduledAt = scheduledAt;
         this.updatedAt = now;
     }
 

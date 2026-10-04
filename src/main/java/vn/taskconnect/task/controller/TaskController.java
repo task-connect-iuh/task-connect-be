@@ -21,6 +21,7 @@ import vn.taskconnect.task.api.TaskAiFlagReason;
 import vn.taskconnect.task.dto.request.CreateTaskRequest;
 import vn.taskconnect.task.dto.request.RejectTaskRequest;
 import vn.taskconnect.task.dto.request.TaskImageUploadUrlRequest;
+import vn.taskconnect.task.dto.request.UpdateTaskRequest;
 import vn.taskconnect.task.dto.response.TaskImageUploadUrlResponse;
 import vn.taskconnect.task.dto.response.TaskResponse;
 import vn.taskconnect.task.dto.response.TaskReviewSummaryResponse;
@@ -29,9 +30,10 @@ import vn.taskconnect.task.service.TaskService;
 
 /**
  * Endpoint dang viec (UC06 toi gian, dot 1): tao, xem danh sach cua chinh minh, xem chi
- * tiet. Sua/huy (UC07), theo doi lich su trang thai (UC08), va ung tuyen/xac nhan (UC10/UC11)
- * lam dot sau - xem docs/PROGRESS-TASK-POSTER-MODULE.md. Chua co endpoint duyet danh sach
- * cong khai cho Tasker (browse) o dot nay.
+ * tiet, va tu UC07 sua/huy khi con OPEN/PENDING_REVIEW (xem updateTask()/cancelTask()). Theo
+ * doi lich su trang thai (UC08) va ung tuyen/xac nhan (UC10/UC11) lam dot sau - xem
+ * docs/PROGRESS-TASK-POSTER-MODULE.md. Chua co endpoint duyet danh sach cong khai cho Tasker
+ * (browse) o dot nay.
  */
 @RestController
 @RequestMapping("/api/v1/tasks")
@@ -66,6 +68,32 @@ public class TaskController {
     public ApiResponse<TaskResponse> getTask(@AuthenticationPrincipal AuthenticatedPrincipal principal,
             @PathVariable UUID taskId) {
         return ApiResponse.ok(taskService.getTaskForOwner(principal.accountId(), taskId));
+    }
+
+    /**
+     * Poster sua cong viec cua chinh minh (UC07) - chi khi task con OPEN/PENDING_REVIEW. Chi
+     * sua duoc 6 truong trong UpdateTaskRequest; tieu de/mo ta/anh/dia chi khoa cung vinh vien.
+     * Nhom truong "nang" (ngan sach, vat tu) bi khoa khi dang co it nhat 1 don PENDING - BE van
+     * kiem tra lai trong cung transaction du FE da vo hieu hoa o nhap (chong dua: Tasker ung
+     * tuyen xen giua luc mo form va luc bam Luu).
+     */
+    @PatchMapping("/{taskId}")
+    @PreAuthorize("hasRole('TASK_POSTER')")
+    public ApiResponse<TaskResponse> updateTask(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @PathVariable UUID taskId, @Valid @RequestBody UpdateTaskRequest request) {
+        return ApiResponse.ok(taskService.updateTask(principal.accountId(), taskId, request), "Đã cập nhật công việc.");
+    }
+
+    /**
+     * Poster tu huy cong viec cua chinh minh (UC07) - chi khi con OPEN/PENDING_REVIEW, huy tu do
+     * bat ke co bao nhieu nguoi ung tuyen. Tu ASSIGNED tro di phai qua UC14 (dong thuan hai ben).
+     */
+    @PatchMapping("/{taskId}/cancel")
+    @PreAuthorize("hasRole('TASK_POSTER')")
+    public ApiResponse<Void> cancelTask(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @PathVariable UUID taskId) {
+        taskService.cancelTask(principal.accountId(), taskId);
+        return ApiResponse.ok(null, "Đã huỷ công việc.");
     }
 
     /**

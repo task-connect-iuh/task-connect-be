@@ -45,7 +45,7 @@ public class TaskApplication {
     private String message;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 20)
+    @Column(name = "status", nullable = false, length = 30)
     private TaskApplicationStatus status;
 
     @JdbcTypeCode(SqlTypes.BIGINT)
@@ -127,8 +127,41 @@ public class TaskApplication {
     }
 
     /**
+     * Ca cong viec bi Poster huy (UC07) - khac rejectAuto() (UC11 da chon nguoi khac, con
+     * cong viec van ton tai) va reject() (Poster chi tu choi rieng don nay). Xoa han het han
+     * loi moi neu co (dong bo voi declineInvite()) - cong viec da ket thuc, khong con y nghia
+     * "moi lai".
+     */
+    public void cancelBecauseTaskCancelled(Instant now) {
+        this.status = TaskApplicationStatus.CANCELLED;
+        this.respondedAt = now;
+        this.expiresAt = null;
+    }
+
+    /**
+     * Poster doi "Thoi gian mong muon" (scheduledAt) trong luc don dang PENDING (UC07 Tier 3) -
+     * don treo lai, cho Tasker xac nhan lai qua reconfirmAfterTimeChange() hoac rut qua
+     * withdraw().
+     */
+    public void markTimeChangedNeedsReconfirm(Instant now) {
+        this.status = TaskApplicationStatus.TIME_CHANGED_NEEDS_RECONFIRM;
+        this.respondedAt = now;
+    }
+
+    /**
+     * Tasker bam "Van nhan viec" sau khi Poster doi thoi gian mong muon (UC07 Tier 3) - don tro
+     * ve PENDING, Poster lai chon duoc nguoi nay o UC11 nhu binh thuong.
+     */
+    public void reconfirmAfterTimeChange(Instant now) {
+        this.status = TaskApplicationStatus.PENDING;
+        this.respondedAt = now;
+    }
+
+    /**
      * Tasker rut lui mot don dang PENDING hoac INQUIRING (nhan/SYSTEM message hien thi khac
-     * nhau theo nguon goc, xem dac ta muc 5, nhung dung chung 1 gia tri enum WITHDRAWN).
+     * nhau theo nguon goc, xem dac ta muc 5, nhung dung chung 1 gia tri enum WITHDRAWN). Cung
+     * dung cho don dang TIME_CHANGED_NEEDS_RECONFIRM (UC07 Tier 3) - Tasker khong dong y gio
+     * moi thi rut, xem TaskApplicationService.withdraw().
      */
     public void withdraw(Instant now) {
         this.status = TaskApplicationStatus.WITHDRAWN;

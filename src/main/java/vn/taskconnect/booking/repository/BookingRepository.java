@@ -13,4 +13,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     /** Booking gan voi 1 application - UNIQUE trong V31, toi da 1 ket qua. */
     Optional<Booking> findByApplicationId(UUID applicationId);
+
+    /** Booking gan voi 1 task - chi co the co toi da 1 (UC11 chi chon dung 1 ung vien thang cho moi task). */
+    Optional<Booking> findByTaskId(UUID taskId);
 }

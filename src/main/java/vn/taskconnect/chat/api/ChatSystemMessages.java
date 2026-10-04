@@ -18,6 +18,14 @@ public final class ChatSystemMessages {
     public static final String TASK_ASSIGNED_TO_ANOTHER = "Công việc đã được giao cho Tasker khác.";
 
     /**
+     * SYSTEM message khi Admin tu choi mot cong viec dang hau kiem (TaskService.rejectFlaggedTask,
+     * chuyen Task.status sang REJECTED) - gui vao TAT CA kenh con OPEN cua cac don ung tuyen
+     * thuoc task nay kem dong kenh (xem TaskService.rejectFlaggedTask), MO RONG ngoai dac ta Chat
+     * goc (tinh nang hau kiem thuoc module Task, theo yeu cau nguoi dung).
+     */
+    public static final String TASK_REJECTED_BY_ADMIN = "Quản trị viên đã huỷ bỏ công việc này.";
+
+    /**
      * SYSTEM message vao kenh cua ung vien THANG khi Poster bam "Chon nguoi nay" (UC11) - dac ta
      * khong cho san chuoi chinh xac cho truong hop nay (chi co san TASK_ASSIGNED_TO_ANOTHER cho
      * cac ung vien thua), suy luan theo van phong cac message khac. Them 2026-09-21 theo bao cao
@@ -30,6 +38,34 @@ public final class ChatSystemMessages {
 
     /** SYSTEM message khi tien trinh nen tu dong danh dau 1 loi moi INVITED qua han (Round B5, dac ta muc 8). */
     public static final String INVITE_EXPIRED = "Lời mời đã hết hạn do không có phản hồi.";
+
+    /**
+     * SYSTEM message khi Poster tu huy cong viec luc con OPEN/PENDING_REVIEW (UC07) - gui vao
+     * TAT CA kenh con OPEN cua cac don ung tuyen thuoc task nay kem dong kenh (xem
+     * TaskService.cancelTask), MO RONG ngoai dac ta Chat goc giong TASK_REJECTED_BY_ADMIN.
+     */
+    public static final String TASK_CANCELLED_BY_POSTER = "Công việc đã bị huỷ.";
+
+    /**
+     * SYSTEM message khi Poster sua thanh cong vat tu (suppliesStatus/suppliesNote) HOAC
+     * scheduledAt cua cong viec (UC07) - CHI gui vao kenh dang INQUIRING/INVITED, KHONG dong
+     * kenh, kem ref_task_edit_id de FE hien nut "Xem chi tiết thay đổi" (xem TaskService.
+     * updateTask). budgetAmount KHONG bao gio roi vao nhanh nay - bi khoa (BROAD_LOCK_FIELDS) tu
+     * truoc khi toi duoc day neu con INQUIRING/INVITED.
+     */
+    public static final String TASK_UPDATED_BY_POSTER = "Poster vừa cập nhật thông tin công việc";
+
+    /**
+     * SYSTEM message vao kenh cua 1 don dang PENDING khi Poster doi "Thoi gian mong muon" (UC07
+     * Tier 3) - don do chuyen sang TIME_CHANGED_NEEDS_RECONFIRM, can Tasker xac nhan lai hoac rut.
+     */
+    public static final String TASK_TIME_CHANGED_NEEDS_RECONFIRM =
+            "Poster vừa đổi thời gian mong muốn. Hãy xác nhận lại nếu bạn vẫn nhận việc này.";
+
+    /** SYSTEM message khi Tasker bam "Van nhan viec" sau khi Poster doi thoi gian mong muon (UC07 Tier 3). */
+    public static String taskerReconfirmedAfterTimeChange(String taskerName) {
+        return taskerName + " đã xác nhận vẫn nhận công việc này.";
+    }
 
     /**
      * Dinh dang ngay gio theo .claude/rules/22-vietnamese-copy.md ("09/08 · 10:20", khong nam,
@@ -66,6 +102,15 @@ public final class ChatSystemMessages {
     /** SYSTEM message mo kenh khi Poster moi truc tiep (status INVITED, dac ta muc 2, dung tu Round B5). */
     public static String posterInvited(String posterName) {
         return posterName + " mời bạn nhận công việc này.";
+    }
+
+    /**
+     * SYSTEM message mo kenh khi Tasker ung tuyen kem "De nghi mot muc khac" (status PENDING,
+     * yeu cau nguoi dung 2026-09-30) - dung cung mau voi posterInvited(), khac o cho ben mo kenh
+     * la Tasker (nguoi ung tuyen) thay vi Poster (nguoi moi).
+     */
+    public static String taskerAppliedWithPriceProposal(String taskerName) {
+        return taskerName + " đã ứng tuyển và đề nghị một mức giá khác.";
     }
 
     /** SYSTEM message khi Tasker rut mot don dang PENDING (dac ta muc 5 bang o cuoi). */
@@ -128,6 +173,21 @@ public final class ChatSystemMessages {
     /** SYSTEM message khi ben con lai Tu choi de xuat doi lich con PROPOSED - phan biet voi rescheduleProposalWithdrawn(). */
     public static String rescheduleProposalRejected(String rejecterName) {
         return rejecterName + " đã từ chối đề xuất đổi lịch.";
+    }
+
+    /** SYSTEM message khi Poster dong y 1 batch chi phi phat sinh dang PENDING. */
+    public static String extraCostApproved(String posterName, long totalAmount) {
+        return posterName + " đã đồng ý khoản chi phí phát sinh " + formatVnd(totalAmount) + ".";
+    }
+
+    /** SYSTEM message khi Poster tu choi 1 batch chi phi phat sinh dang PENDING. */
+    public static String extraCostRejected(String posterName) {
+        return posterName + " đã từ chối khoản chi phí phát sinh.";
+    }
+
+    /** SYSTEM message khi Tasker tu thu hoi 1 batch chi phi phat sinh do chinh minh dang, dang PENDING. */
+    public static String extraCostWithdrawn(String taskerName) {
+        return taskerName + " đã thu hồi khoản chi phí phát sinh.";
     }
 
     /** Dinh dang tien theo .claude/rules/22-vietnamese-copy.md: dau cham ngan nghin, ky hieu ₫ sau co khoang trang. */

@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import vn.taskconnect.user.api.AvailabilityMode;
 import vn.taskconnect.user.api.KycStatus;
 import vn.taskconnect.user.api.LocationType;
 
@@ -70,6 +71,13 @@ public class UserProfile {
     @Column(name = "arrival_notes", length = 500)
     private String arrivalNotes;
 
+    // Che do lich lam viec Tasker tu khai: FLEXIBLE (gio linh hoat) hoac CUSTOM (tu chon
+    // khung gio, xem TaskerAvailability) - null neu chua khai bao (tai khoan cu). Xem
+    // V43__add_availability_mode_to_user_profiles.sql.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "availability_mode", length = 20)
+    private AvailabilityMode availabilityMode;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "kyc_status", nullable = false, length = 20)
     private KycStatus kycStatus;
@@ -105,7 +113,7 @@ public class UserProfile {
      */
     public void updateDetails(String fullName, String avatarUrl, String addressText, String bio,
             String operatingArea, BigDecimal locationLat, BigDecimal locationLng, Integer preferredRadiusKm,
-            LocationType locationType, String arrivalNotes, Instant now) {
+            LocationType locationType, String arrivalNotes, AvailabilityMode availabilityMode, Instant now) {
         this.fullName = fullName;
         this.avatarUrl = avatarUrl;
         this.addressText = addressText;
@@ -116,6 +124,7 @@ public class UserProfile {
         this.preferredRadiusKm = preferredRadiusKm;
         this.locationType = locationType;
         this.arrivalNotes = arrivalNotes;
+        this.availabilityMode = availabilityMode;
         this.updatedAt = now;
     }
 
@@ -185,6 +194,11 @@ public class UserProfile {
     /** Luu y cho Tasker khi toi nha Poster, null neu chua khai bao. */
     public String getArrivalNotes() {
         return arrivalNotes;
+    }
+
+    /** Che do lich lam viec Tasker tu khai (FLEXIBLE/CUSTOM), null neu chua khai bao. */
+    public AvailabilityMode getAvailabilityMode() {
+        return availabilityMode;
     }
 
     /** Trang thai KYC hien tai, dong bo tu module KYC (Buoc 4) khi duoc duyet/tu choi. */
