@@ -18,13 +18,20 @@ import vn.taskconnect.common.response.ApiResponse;
 import vn.taskconnect.common.response.PageResponse;
 import vn.taskconnect.security.jwt.AuthenticatedPrincipal;
 import vn.taskconnect.task.api.TaskAiFlagReason;
+import vn.taskconnect.task.dto.request.AnalyzeTaskImageRequest;
 import vn.taskconnect.task.dto.request.CreateTaskRequest;
+import vn.taskconnect.task.dto.request.RefineClarifyingAnswersRequest;
 import vn.taskconnect.task.dto.request.RejectTaskRequest;
+import vn.taskconnect.task.dto.request.SuggestTaskPriceRequest;
 import vn.taskconnect.task.dto.request.TaskImageUploadUrlRequest;
+import vn.taskconnect.task.dto.response.RefineClarifyingAnswersResponse;
+import vn.taskconnect.task.dto.response.TaskImageSuggestionResponse;
 import vn.taskconnect.task.dto.response.TaskImageUploadUrlResponse;
+import vn.taskconnect.task.dto.response.TaskPriceSuggestionResponse;
 import vn.taskconnect.task.dto.response.TaskResponse;
 import vn.taskconnect.task.dto.response.TaskReviewSummaryResponse;
 import vn.taskconnect.task.service.TaskImageUploadService;
+import vn.taskconnect.task.service.TaskPriceSuggestionService;
 import vn.taskconnect.task.service.TaskService;
 
 /**
@@ -39,10 +46,13 @@ public class TaskController {
 
     private final TaskService taskService;
     private final TaskImageUploadService imageUploadService;
+    private final TaskPriceSuggestionService priceSuggestionService;
 
-    public TaskController(TaskService taskService, TaskImageUploadService imageUploadService) {
+    public TaskController(TaskService taskService, TaskImageUploadService imageUploadService,
+            TaskPriceSuggestionService priceSuggestionService) {
         this.taskService = taskService;
         this.imageUploadService = imageUploadService;
+        this.priceSuggestionService = priceSuggestionService;
     }
 
     /** Dang mot cong viec moi - chi tai khoan mang role TASK_POSTER goi duoc. */
@@ -79,6 +89,45 @@ public class TaskController {
             @AuthenticationPrincipal AuthenticatedPrincipal principal,
             @Valid @RequestBody TaskImageUploadUrlRequest request) {
         return ApiResponse.ok(imageUploadService.createUploadUrl(principal.accountId(), request));
+    }
+
+    /**
+     * Goi y dien form (tieu de/mo ta/danh muc) tu MOT anh minh hoa da tai len S3 truoc do (xem
+     * POST /tasks/images-upload-url) - CHI la goi y, Poster xem va sua/xoa tuy y truoc khi bam
+     * "Dang viec". Khong goi y gia/lich ranh (anh khong the hien thi hai thu nay).
+     */
+    @PostMapping("/analyze-image")
+    @PreAuthorize("hasRole('TASK_POSTER')")
+    public ApiResponse<TaskImageSuggestionResponse> analyzeTaskImage(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @Valid @RequestBody AnalyzeTaskImageRequest request) {
+        return ApiResponse.ok(taskService.analyzeTaskImage(principal.accountId(), request));
+    }
+
+    /**
+     * Goi y muc gia luc dang viec, dua tren gia da chot cua cac task tuong tu trong qua khu
+     * cung category (xem Javadoc TaskPriceSuggestionService) - CHI la goi y, Poster xem va
+     * sua/xoa tuy y, khong rang buoc gi. available=false (het du lieu tuong tu/AI loi) van tra
+     * 200, KHONG phai loi - FE tu quyet dinh giu nguyen "thoa thuan".
+     */
+    @PostMapping("/suggest-price")
+    @PreAuthorize("hasRole('TASK_POSTER')")
+    public ApiResponse<TaskPriceSuggestionResponse> suggestTaskPrice(
+            @Valid @RequestBody SuggestTaskPriceRequest request) {
+        return ApiResponse.ok(priceSuggestionService.suggestPrice(request));
+    }
+
+    /**
+     * Gop mo ta hien tai voi cac cau tra loi Poster vua dien trong modal "Hoi them" (xem
+     * ClarifyAssistantDialog.tsx) thanh MOT doan mo ta hoan chinh do AI viet lai - CHI la goi y,
+     * Poster van xem va sua tren o Mo ta truoc khi dang. available=false (het quota/loi mang)
+     * van tra 200, KHONG phai loi - FE tu fallback ve cach ghep tho "{questionText}: {answer}.".
+     */
+    @PostMapping("/refine-description")
+    @PreAuthorize("hasRole('TASK_POSTER')")
+    public ApiResponse<RefineClarifyingAnswersResponse> refineClarifyingAnswers(
+            @Valid @RequestBody RefineClarifyingAnswersRequest request) {
+        return ApiResponse.ok(taskService.refineClarifyingAnswers(request));
     }
 
     /**

@@ -11,6 +11,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vn.taskconnect.chat.api.ChatFacade;
+import vn.taskconnect.chat.api.ChatSystemMessages;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.matching.api.TaskerInviteStatus;
@@ -40,15 +42,18 @@ public class TaskerInviteService {
     private final TaskFacade taskFacade;
     private final UserFacade userFacade;
     private final AiSuggestionService aiSuggestionService;
+    private final ChatFacade chatFacade;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public TaskerInviteService(TaskerInviteRepository inviteRepository, TaskFacade taskFacade, UserFacade userFacade,
-            AiSuggestionService aiSuggestionService, ApplicationEventPublisher eventPublisher, Clock clock) {
+            AiSuggestionService aiSuggestionService, ChatFacade chatFacade, ApplicationEventPublisher eventPublisher,
+            Clock clock) {
         this.inviteRepository = inviteRepository;
         this.taskFacade = taskFacade;
         this.userFacade = userFacade;
         this.aiSuggestionService = aiSuggestionService;
+        this.chatFacade = chatFacade;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
@@ -91,7 +96,12 @@ public class TaskerInviteService {
     /**
      * Tasker chap nhan mot loi moi - invite chuyen ACCEPTED, Task chuyen ASSIGNED qua
      * TaskFacade.assignTask() (khong tu doi trang thai Task truc tiep - module Matching
-     * khong duoc sua entity cua module Task, xem ranh gioi module).
+     * khong duoc sua entity cua module Task, xem ranh gioi module). Mo luon 1 kenh chat giua
+     * Poster/Tasker (yeu cau nguoi dung: "khi an nhan viec thi 2 ben se mo 1 doan chat") - tao
+     * 1 dong task_applications "vo chua" qua TaskFacade.createAcceptedApplicationForExternalInvite()
+     * de co applicationId hop le cho ChatFacade (chat_channels.application_id la FK toi
+     * task_applications, khong biet gi ve tasker_invites), roi goi notifyApplicationConfirmed()
+     * y het TaskApplicationService.confirm() - lazy-create kenh + 1 SYSTEM message.
      */
     @Transactional
     public TaskerInviteResponse accept(UUID taskerId, UUID taskId, UUID inviteId) {
@@ -100,7 +110,17 @@ public class TaskerInviteService {
 
         invite.accept(clock.instant());
         taskFacade.assignTask(taskId, task.posterId());
+
+        Instant now = clock.instant();
+        UUID applicationId = taskFacade.createAcceptedApplicationForExternalInvite(taskId, taskerId, invite.getId());
+        chatFacade.notifyApplicationConfirmed(applicationId,
+                ChatSystemMessages.taskerConfirmed(resolveDisplayName(task.posterId())), now);
         return toResponse(invite);
+    }
+
+    /** Ten hien thi cua 1 tai khoan, null-an-toan neu khong tim duoc profile - dung cho SYSTEM message. */
+    private String resolveDisplayName(UUID accountId) {
+        return userFacade.findProfile(accountId).map(UserProfileSummary::fullName).orElse(null);
     }
 
     /** Tasker tu choi mot loi moi - chuyen DECLINED, khong dong den Task hay cac loi moi khac. */
@@ -111,9 +131,16 @@ public class TaskerInviteService {
         return toResponse(invite);
     }
 
-    /** Toan bo loi moi cua mot Task, dung cho Poster xem lai da moi ai (khong bat buoc trong scope controller hien tai nhung giu san cho UI sau). */
+    /**
+     * Toan bo loi moi cua mot Task, dung cho Poster xem lai da moi ai (UI "Tasker goi y" seed
+     * trang thai nut Moi/dem so da moi khi vao lai trang - xem SuggestedTaskersPanel.tsx).
+     * Chan task khong thuoc ve Poster nay, mirror create().
+     */
     @Transactional(readOnly = true)
-    public List<TaskerInviteResponse> listInvitesForTask(UUID taskId) {
+    public List<TaskerInviteResponse> listInvitesForTask(UUID posterId, UUID taskId) {
+        taskFacade.findTask(taskId)
+                .filter(t -> t.posterId().equals(posterId))
+                .orElseThrow(() -> new BusinessException(ErrorCode.TASK_NOT_FOUND));
         return inviteRepository.findByTaskId(taskId).stream().map(this::toResponse).toList();
     }
 

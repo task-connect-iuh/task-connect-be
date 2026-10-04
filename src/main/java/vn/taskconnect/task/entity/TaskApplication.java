@@ -59,6 +59,16 @@ public class TaskApplication {
     @Column(name = "expires_at")
     private Instant expiresAt;
 
+    // Chi khac null cho 1 dong duoc TaskFacade.createAcceptedApplicationForExternalInvite() tao
+    // thay cho module Matching (TaskerInviteService.accept()) - "vo chua" de chat_channels co
+    // the FK vao, KHONG phai don ung tuyen/loi moi thuc su. Gia tri la id ben ngoai module Task
+    // (tasker_invites.id) - Task khong can hieu y nghia, chi dung de loc dong nay khoi cac danh
+    // sach huong toi nguoi dung (xem requireNoBlockingApplication, listMyApplications,
+    // listApplicantsForOwner).
+    @JdbcTypeCode(SqlTypes.BINARY)
+    @Column(name = "external_invite_ref", columnDefinition = "BINARY(16)", updatable = false)
+    private UUID externalInviteRef;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -189,6 +199,26 @@ public class TaskApplication {
         return application;
     }
 
+    /**
+     * Tao 1 dong "vo chua" o trang thai ACCEPTED (khong di qua INVITED/PENDING - Tasker da
+     * chap nhan loi moi thuc su o module Matching truoc khi goi toi day) chi de co mot
+     * applicationId hop le cho ChatFacade mo kenh (dac ta: xem TaskFacade.createAcceptedApplicationForExternalInvite).
+     * externalInviteRef luon khac null, dung de loc khoi cac danh sach huong toi nguoi dung.
+     */
+    public static TaskApplication createForExternalInvite(UUID id, UUID taskId, UUID taskerId,
+            UUID externalInviteRef, Instant now) {
+        TaskApplication application = new TaskApplication();
+        application.id = id;
+        application.taskId = taskId;
+        application.taskerId = taskerId;
+        application.status = TaskApplicationStatus.ACCEPTED;
+        application.initiatedBy = TaskApplicationInitiator.POSTER;
+        application.externalInviteRef = externalInviteRef;
+        application.createdAt = now;
+        application.respondedAt = now;
+        return application;
+    }
+
     /** Tasker bam "Nhan tin hoi them" - tu dong tao don INQUIRING, khong het han (UC16 muc 2). */
     public static TaskApplication inquire(UUID id, UUID taskId, UUID taskerId, String message, Instant now) {
         TaskApplication application = new TaskApplication();
@@ -263,5 +293,10 @@ public class TaskApplication {
     /** Thoi diem Poster phan hoi (xac nhan/tu choi) hoac tu dong chuyen NEEDS_RECONFIRM, null neu con PENDING. */
     public Instant getRespondedAt() {
         return respondedAt;
+    }
+
+    /** Khac null chi voi dong "vo chua" tao boi createForExternalInvite() - xem Javadoc field. */
+    public UUID getExternalInviteRef() {
+        return externalInviteRef;
     }
 }

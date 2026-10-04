@@ -21,6 +21,20 @@ public interface TaskApplicationRepository extends JpaRepository<TaskApplication
     List<TaskApplication> findByTaskId(UUID taskId);
 
     /**
+     * Nhu findByTaskId nhung loai cac dong "vo chua" (externalInviteRef khac null, tao boi
+     * createAcceptedApplicationForExternalInvite) - dung cho listApplicantsForOwner, Poster
+     * khong nen thay dong nay lan trong danh sach ung vien thuc su.
+     */
+    List<TaskApplication> findByTaskIdAndExternalInviteRefIsNull(UUID taskId);
+
+    /**
+     * Nhu findByTaskerIdOrderByCreatedAtDesc nhung loai cac dong "vo chua" - dung cho
+     * listMyApplications ("Viec da nhan"), Tasker da thay cong viec nay qua man "Loi moi ban
+     * nhan duoc" (module Matching) roi, khong nen thay lap mot dong nua o day.
+     */
+    List<TaskApplication> findByTaskerIdAndExternalInviteRefIsNullOrderByCreatedAtDesc(UUID taskerId);
+
+    /**
      * Toan bo don (moi trang thai, co the nhieu dong theo thoi gian tu Round B5 sua lai - xem
      * V33__drop_unique_task_applications_task_tasker.sql) cho 1 cap task+tasker, dung 1 trong
      * cac trang thai da cho - dung de kiem tra "co dong nao dang chan ung tuyen/moi lai khong"
@@ -28,9 +42,6 @@ public interface TaskApplicationRepository extends JpaRepository<TaskApplication
      */
     List<TaskApplication> findByTaskIdAndTaskerIdAndStatusIn(UUID taskId, UUID taskerId,
             Collection<TaskApplicationStatus> statuses);
-
-    /** Toan bo don ung tuyen cua mot Tasker, moi gui gan day nhat truoc - dung cho "Viec da nhan". */
-    List<TaskApplication> findByTaskerIdOrderByCreatedAtDesc(UUID taskerId);
 
     /**
      * Toan bo don cua 1 Tasker dang dung 1 trong cac trang thai da cho - dung de suy ra tap

@@ -24,4 +24,12 @@ public interface TaskPriceHistoryRepository extends JpaRepository<TaskPriceHisto
      * nay khong phan biet duoc "dang cho" voi "da Tu choi/Thu hoi" (ca 2 deu accepted_at NULL).
      */
     Optional<TaskPriceHistory> findTopByApplicationIdOrderByCreatedAtDesc(UUID applicationId);
+
+    /**
+     * Toan bo dong da duoc Dong y (gia da that su chot) tren toan he thong - dung lam nguon
+     * du lieu cho TaskPriceSuggestionService.goi y muc gia luc dang viec (dua tren cac task
+     * tuong tu trong qua khu). Loc theo category duoc thuc hien o tang Java (xem Javadoc
+     * TaskPriceSuggestionService) vi bang nay khong co cot categoryId truc tiep.
+     */
+    List<TaskPriceHistory> findByAcceptedAtIsNotNull();
 }

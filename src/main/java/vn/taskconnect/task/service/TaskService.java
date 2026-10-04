@@ -15,18 +15,28 @@ import org.springframework.transaction.annotation.Transactional;
 import vn.taskconnect.ai.api.AiFacade;
 import vn.taskconnect.ai.api.dto.CategoryClassificationRequest;
 import vn.taskconnect.ai.api.dto.CategoryClassificationResult;
+import vn.taskconnect.ai.api.dto.ImageTaskSuggestionRequest;
+import vn.taskconnect.ai.api.dto.ImageTaskSuggestionResult;
+import vn.taskconnect.ai.api.dto.ClarifyingAnswerInput;
+import vn.taskconnect.ai.api.dto.RefineDescriptionRequest;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
 import vn.taskconnect.task.api.TaskApplicationStatus;
 import vn.taskconnect.task.api.TaskAiFlagReason;
 import vn.taskconnect.task.api.TaskStatus;
+import vn.taskconnect.task.dto.request.AnalyzeTaskImageRequest;
 import vn.taskconnect.task.dto.request.CreateTaskRequest;
+import vn.taskconnect.task.dto.request.RefineClarifyingAnswersRequest;
 import vn.taskconnect.task.dto.request.RejectTaskRequest;
+import vn.taskconnect.task.dto.response.ClarifyingQuestionResponse;
+import vn.taskconnect.task.dto.response.RefineClarifyingAnswersResponse;
+import vn.taskconnect.task.dto.response.TaskImageSuggestionResponse;
 import vn.taskconnect.task.dto.response.TaskResponse;
 import vn.taskconnect.task.dto.response.TaskReviewSummaryResponse;
 import vn.taskconnect.task.entity.Task;
 import vn.taskconnect.task.entity.TaskApplication;
 import vn.taskconnect.task.entity.TaskImage;
+import vn.taskconnect.task.infrastructure.TaskImageFetcher;
 import vn.taskconnect.task.repository.TaskApplicationRepository;
 import vn.taskconnect.task.repository.TaskImageRepository;
 import vn.taskconnect.task.repository.TaskRepository;
@@ -78,15 +88,18 @@ public class TaskService {
     private final TaskApplicationRepository applicationRepository;
     private final UserFacade userFacade;
     private final AiFacade aiFacade;
+    private final TaskImageFetcher imageFetcher;
     private final Clock clock;
 
     public TaskService(TaskRepository taskRepository, TaskImageRepository imageRepository,
-            TaskApplicationRepository applicationRepository, UserFacade userFacade, AiFacade aiFacade, Clock clock) {
+            TaskApplicationRepository applicationRepository, UserFacade userFacade, AiFacade aiFacade,
+            TaskImageFetcher imageFetcher, Clock clock) {
         this.taskRepository = taskRepository;
         this.imageRepository = imageRepository;
         this.applicationRepository = applicationRepository;
         this.userFacade = userFacade;
         this.aiFacade = aiFacade;
+        this.imageFetcher = imageFetcher;
         this.clock = clock;
     }
 
@@ -127,6 +140,72 @@ public class TaskService {
         List<TaskImage> savedImages = saveImages(task.getId(), imageUrls);
         return TaskResponse.from(task, category.name(),
                 savedImages.stream().map(TaskImage::getImageUrl).toList(), 0);
+    }
+
+    /**
+     * Goi y dien form dang viec (tieu de/mo ta/danh muc) tu MOT anh minh hoa da tai len S3
+     * truoc do (function 1 - "tro ly dien form", xem .claude/rules/15-ai-module.md). KHONG goi
+     * y gia/lich ranh - anh khong the hien thi hai thu nay (quyet dinh da chot voi nguoi dung).
+     * Day CHI la goi y, khong rang buoc gi trang thai cong viec; phan loai category CHINH THUC
+     * van chay lai luc submit tren mo ta CUOI CUNG (xem classifyAndFlag()), khong tai su dung
+     * ket qua o day. Nem INVALID_TASK_IMAGE_URL neu imageUrl khong thuoc dung prefix cua chinh
+     * Poster dang goi (chan xem/phan tich anh cua nguoi khac, chan SSRF - xem TaskImageFetcher).
+     * Tra ve available=false (KHONG nem loi) neu AI het quota/loi mang - khong chan Poster tiep
+     * tuc dien tay, dung tinh than "AI khong bao gio la quyet dinh cuoi, khong chan luong chinh".
+     */
+    @Transactional(readOnly = true)
+    public TaskImageSuggestionResponse analyzeTaskImage(UUID posterId, AnalyzeTaskImageRequest request) {
+        Optional<TaskImageFetcher.FetchedImage> fetched = imageFetcher.fetchOwnedTaskImage(posterId, request.imageUrl());
+        if (fetched.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_TASK_IMAGE_URL);
+        }
+        List<ServiceCategorySummary> categories = userFacade.listActiveServiceCategories();
+        Optional<ImageTaskSuggestionResult> result = aiFacade.suggestTaskFromImage(
+                new ImageTaskSuggestionRequest(fetched.get().bytes(), fetched.get().mimeType(), toCandidates(categories)));
+        if (result.isEmpty()) {
+            return TaskImageSuggestionResponse.unavailable();
+        }
+        ImageTaskSuggestionResult suggestion = result.get();
+        CategoryClassificationResult category = suggestion.category();
+        UUID suggestedCategoryId = null;
+        int confidence = 0;
+        if (category != null && category.outcome() == CategoryClassificationResult.ClassificationOutcome.CATEGORY) {
+            suggestedCategoryId = categories.stream()
+                    .filter(c -> c.code().equals(category.candidateId()))
+                    .findFirst()
+                    .map(ServiceCategorySummary::id)
+                    .orElse(null);
+            confidence = suggestedCategoryId != null ? category.confidence() : 0;
+        }
+        List<ClarifyingQuestionResponse> clarifyingQuestions = suggestion.clarifyingQuestions() == null
+                ? List.of()
+                : suggestion.clarifyingQuestions().stream()
+                        .map(q -> new ClarifyingQuestionResponse(q.key(), q.text(), q.placeholder()))
+                        .toList();
+        return new TaskImageSuggestionResponse(true, suggestion.title(), suggestion.description(),
+                suggestedCategoryId, confidence, clarifyingQuestions);
+    }
+
+    /**
+     * Gop mo ta hien tai tren form voi cac cau tra loi Poster vua dien trong modal "Hoi them"
+     * (xem analyzeTaskImage() o tren) thanh MOT doan mo ta hoan chinh do AI viet lai (function 4
+     * phan "viet lai", xem .claude/rules/15-ai-module.md) - thay vi Poster tu doc cau tra loi
+     * tho cua minh ghep thanh "{key}: {answer}." vao cuoi o Mo ta. CHI la goi y, Poster van xem
+     * va sua truoc khi dang. Tra ve available=false (KHONG nem loi) neu AI het quota/loi mang -
+     * FE tu fallback ve cach ghep tho nhu truoc, khong chan Poster tiep tuc.
+     */
+    @Transactional(readOnly = true)
+    public RefineClarifyingAnswersResponse refineClarifyingAnswers(RefineClarifyingAnswersRequest request) {
+        if (request.answers().isEmpty()) {
+            return RefineClarifyingAnswersResponse.unavailable();
+        }
+        List<ClarifyingAnswerInput> answers = request.answers().stream()
+                .map(a -> new ClarifyingAnswerInput(a.questionText(), a.answer()))
+                .toList();
+        Optional<String> refined = aiFacade.refineTaskDescription(
+                new RefineDescriptionRequest(request.originalDescription(), answers));
+        return refined.map(text -> new RefineClarifyingAnswersResponse(true, text))
+                .orElseGet(RefineClarifyingAnswersResponse::unavailable);
     }
 
     /** Danh sach cong viec da dang cua chinh Poster dang goi, moi dang gan day nhat truoc. */

@@ -27,8 +27,8 @@ import vn.taskconnect.user.api.dto.UserProfileSummary;
  * lan duy nhat cho ca lo de sinh ly do/diem tru bang tieng Viet; neu Groq loi/het quota thi
  * TU DUNG TEMPLATE dung tren chinh cac facts da tinh o buoc 1 (khong chan response, khong
  * bao gio tra 500 vi ly do AI). Logic fallback template thuoc ve day (module Matching, biet
- * nghia nghiep vu cua distance/price/availability), khong thuoc module ai (module ai khong
- * biet Task/Tasker la gi - xem Javadoc AiFacade).
+ * nghia nghiep vu cua distance/experience/availability), khong thuoc module ai (module ai
+ * khong biet Task/Tasker la gi - xem Javadoc AiFacade).
  *
  * <p>Ket qua duoc cache trong bo nho theo taskId trong mot khoang thoi gian ngan de cac lan
  * Poster mo lai trang trong cung phien khong dot them quota AI - ConcurrentHashMap don gian
@@ -131,8 +131,8 @@ public class AiSuggestionService {
                 concerns = aiResult.concerns();
             } else {
                 confidence = (int) Math.round(candidate.finalScore() * 100);
-                reasons = templateReasons(task, candidate);
-                concerns = templateConcerns(task, candidate);
+                reasons = templateReasons(candidate);
+                concerns = templateConcerns(candidate);
             }
             boolean lowConfidence = confidence < properties.lowConfidenceThreshold();
             UserProfileSummary profile = userFacade.findProfile(candidate.accountId()).orElse(null);
@@ -142,7 +142,7 @@ public class AiSuggestionService {
                     profile != null ? profile.avatarUrl() : null,
                     profile != null ? profile.kycStatus() : null,
                     confidence, reasons, concerns, lowConfidence,
-                    candidate.distanceKm(), candidate.priceMin(), candidate.priceMax(), 0));
+                    candidate.distanceKm(), 0));
         }
         return responses;
     }
@@ -156,7 +156,6 @@ public class AiSuggestionService {
     private Map<String, String> buildFacts(TaskSummary task, RankedCandidate candidate) {
         Map<String, String> facts = new HashMap<>();
         facts.put("distance", String.format("%.1f km", candidate.distanceKm()));
-        facts.put("priceFit", describePriceFit(task.budgetAmount(), candidate.priceMin(), candidate.priceMax()));
         facts.put("availability", describeAvailability(candidate.availabilityMatches()));
         facts.put("experience", describeExperience(candidate.yearsExperience()));
         return facts;
@@ -175,16 +174,6 @@ public class AiSuggestionService {
             return "Khoảng 1 năm kinh nghiệm";
         }
         return years + " năm kinh nghiệm";
-    }
-
-    private String describePriceFit(Long budget, Long priceMin, Long priceMax) {
-        if (budget == null || priceMin == null || priceMax == null) {
-            return "Chưa đủ thông tin để so sánh giá";
-        }
-        if (budget >= priceMin && budget <= priceMax) {
-            return "Trong khoảng ngân sách bạn đề xuất";
-        }
-        return budget < priceMin ? "Cao hơn ngân sách bạn đề xuất" : "Thấp hơn ngân sách bạn đề xuất";
     }
 
     private String describeAvailability(Boolean matches) {
@@ -220,15 +209,11 @@ public class AiSuggestionService {
     }
 
     /** Ly do fallback dung template khi Groq loi/het quota - dung chinh cac facts da tinh, khong bia them. */
-    private List<String> templateReasons(TaskSummary task, RankedCandidate candidate) {
+    private List<String> templateReasons(RankedCandidate candidate) {
         List<String> reasons = new ArrayList<>();
         boolean variantA = candidate.accountId().hashCode() % 2 == 0;
         if (candidate.distanceKm() <= 8) {
             reasons.add(describeDistance(candidate.distanceKm(), variantA));
-        }
-        if (candidate.priceMin() != null && candidate.priceMax() != null && task.budgetAmount() != null
-                && task.budgetAmount() >= candidate.priceMin() && task.budgetAmount() <= candidate.priceMax()) {
-            reasons.add(variantA ? "Mức giá đúng với ngân sách bạn đưa ra" : "Giá đề xuất nằm trong khoảng bạn dự tính");
         }
         if (Boolean.TRUE.equals(candidate.availabilityMatches())) {
             reasons.add(variantA ? "Đúng khung giờ rảnh bạn chọn" : "Lịch rảnh khớp với thời gian bạn cần");
@@ -243,7 +228,7 @@ public class AiSuggestionService {
     }
 
     /** Diem tru fallback dung template khi Groq loi/het quota - dung chinh cac facts da tinh, khong bia them. */
-    private List<String> templateConcerns(TaskSummary task, RankedCandidate candidate) {
+    private List<String> templateConcerns(RankedCandidate candidate) {
         List<String> concerns = new ArrayList<>();
         boolean variantA = candidate.accountId().hashCode() % 2 == 0;
         if (candidate.distanceKm() > 8) {

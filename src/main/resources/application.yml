@@ -156,6 +156,46 @@ ai:
     # chan truoc khi cham TPD that, chua margin an toan. Tang lai neu do luong thay prompt
     # thuc te ngan hon uoc tinh.
     daily-quota: ${AI_LLM_DAILY_QUOTA:80}
+  vision:
+    provider: gemini
+    # Dung chung GEMINI_API_KEY voi ai.embedding o tren (cung mot tai khoan Google AI Studio),
+    # nhung model va quota rieng vi generateContent (doc anh) la endpoint khac embedContent.
+    api-key: ${GEMINI_API_KEY}
+    # gemini-2.0-flash RIENG bi Google go khoi API that (404 model_not_found xac nhan
+    # 2026-09-26). Google de xuat gemini-3.8-flash trong thong bao loi, nhung kiem tra that
+    # tren aistudio.google.com/rate-limit (dashboard cua chinh nguoi dung, 2026-09-26) cho
+    # thay gemini-3.8-flash free tier CHI 20 request/ngay (5 RPM) - qua chat cho quy mo dung
+    # thu/dev. Doi sang gemini-3.5-flash-lite: van doc anh binh thuong (multimodal text/image/
+    # video/audio/PDF qua generateContent, xac nhan tai ai.google.dev/gemini-api/docs/models/
+    # gemini-3.5-flash-lite), nhung free tier 500 request/ngay (15 RPM) - gap 25 lan. Doi qua
+    # bien moi truong GEMINI_VISION_MODEL neu Google lai doi/go model lan nua, khong can sua
+    # code - kiem tra so that tai aistudio.google.com/rate-limit (dang nhap dung tai khoan giu
+    # GEMINI_API_KEY), KHONG dua vao thong bao loi hay docs cong khai, co the chua cap nhat kip.
+    model: ${GEMINI_VISION_MODEL:gemini-3.5-flash-lite}
+    # Model du phong - GeminiVisionClient tu doi sang model nay tu lan thu lai thu 2 (trong toi
+    # da 3 lan) neu model chinh tra 5xx tam thoi (qua tai), voi hy vong roi vao pool ha tang/
+    # quota khac cua Gemini. gemini-3.1-flash-lite cung quota that 500 RPD/15 RPM nhu model
+    # chinh (xac nhan tai aistudio.google.com/rate-limit, 2026-09-26), doc anh binh thuong.
+    fallback-model: ${GEMINI_VISION_FALLBACK_MODEL:gemini-3.1-flash-lite}
+    # Free tier gemini-3.5-flash-lite that: 500 RPD (xem comment o model). Dat quota noi bo
+    # thap hon mot chut (400) de con margin an toan, tranh cham dung RPD that cua Google.
+    daily-quota: ${AI_VISION_DAILY_QUOTA:400}
+
+task:
+  price-suggestion:
+    # Nguong cosine similarity (0-1) de coi 1 task qua khu la "tuong tu". Ha tu 0.75 xuong 0.70
+    # sau khi test that voi Gemini (2026-09-29, category Dien lanh, mo ta "Ve sinh may lanh bi
+    # bam bui"): 8 ung vien cung category cho similarity 0.656-0.8165 - 0.75 chi lot 1/8 (qua
+    # chat, luon tra unavailable). O 0.70, 6/8 ung vien lien quan truc tiep may lanh (0.70-0.8165)
+    # duoc giu, dung 2 cai it lien quan hon (sua tu lanh 0.696, sua tu dong 0.656) bi loai - phan
+    # tach hop ly. Van la gia tri THAM KHAO tu 1 lan test, dieu chinh tiep khi co nhieu du lieu
+    # that hon. Dieu chinh qua TASK_PRICE_SIMILARITY_THRESHOLD.
+    similarity-threshold: ${TASK_PRICE_SIMILARITY_THRESHOLD:0.70}
+    # Can it nhat 5 task tuong tu (vuot nguong tren) moi dua ra goi y - khong du thi tra ve
+    # khong co goi y (giu nguyen "thoa thuan"), tranh goi y tu mau qua nho khong dai dien.
+    min-samples: ${TASK_PRICE_MIN_SAMPLES:5}
+    # Chi lay toi da 10 task tuong tu nhat (trong so da vuot nguong) de tinh median gia goi y.
+    top-k: ${TASK_PRICE_TOP_K:10}
 
 vietmap:
   # maps.vietmap.vn - reverse geocode/autocomplete/place/dinh tuyen. Goi TU BACKEND (khong
@@ -171,10 +211,9 @@ matching:
     # Trong so xep hang cau truc (structuredScore), tong = 1.0 - xem
     # task-connect-claude/docs plan "Tasker goi y" da duyet. Cau hinh duoc de de chinh sau
     # khi co du lieu that, khong hardcode trong Java.
-    distance: 0.35
-    price: 0.25
-    experience: 0.15
-    availability: 0.25
+    distance: 0.47
+    experience: 0.20
+    availability: 0.33
     # Trong so tron semanticScore vao finalScore: finalScore = (1 - semantic) * structuredScore
     # + semantic * semanticScore.
     semantic: 0.30

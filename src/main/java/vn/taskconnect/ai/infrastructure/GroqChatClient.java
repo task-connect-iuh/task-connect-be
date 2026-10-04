@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import vn.taskconnect.ai.api.dto.CategoryClassificationRequest;
 import vn.taskconnect.ai.api.dto.CategoryClassificationResult;
+import vn.taskconnect.ai.api.dto.RefineDescriptionRequest;
 import vn.taskconnect.ai.api.dto.SuggestionReasonRequest;
 import vn.taskconnect.ai.api.dto.SuggestionReasonResult;
 
@@ -92,6 +93,37 @@ public class GroqChatClient {
         } catch (RuntimeException | com.fasterxml.jackson.core.JsonProcessingException ex) {
             throw new IllegalStateException(
                     "Goi Groq API hoac parse JSON phan loai category that bai: " + ex.getMessage(), ex);
+        }
+    }
+
+    /**
+     * Goi Groq voi 1 message duy nhat de gop mo ta goc + cau tra loi lam ro thanh MOT doan mo
+     * ta hoan chinh (dung PromptTemplates.buildRefineDescriptionPrompt) - KHAC voi hai method
+     * tren, ket qua la plain text (khong phai JSON) nen chi strip markdown fence neu co, khong
+     * parse JSON. Nem RuntimeException neu goi HTTP that bai - AiFacadeImpl la noi bat va
+     * fallback ve rong, client nay khong tu quyet dinh fallback. Temperature 0.3 - can mach lac
+     * tu nhien hon classifyTaskCategory nhung van on dinh, khong sang tao qua da nhu van phong
+     * tu do.
+     */
+    public String refineDescription(RefineDescriptionRequest request) {
+        String prompt = promptTemplates.buildRefineDescriptionPrompt(request);
+        ChatRequest body = new ChatRequest(properties.llm().model(),
+                List.of(new ChatMessage("user", prompt)), 0.3);
+        try {
+            ChatResponse response = restClient.post()
+                    .uri(ENDPOINT)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header("Authorization", "Bearer " + properties.llm().apiKey())
+                    .body(body)
+                    .retrieve()
+                    .body(ChatResponse.class);
+            if (response == null || response.choices() == null || response.choices().isEmpty()) {
+                throw new IllegalStateException("Groq response rong");
+            }
+            String content = response.choices().get(0).message().content();
+            return stripMarkdownFence(content).strip();
+        } catch (RuntimeException ex) {
+            throw new IllegalStateException("Goi Groq API viet lai mo ta that bai: " + ex.getMessage(), ex);
         }
     }
 

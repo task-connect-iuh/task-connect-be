@@ -385,7 +385,7 @@ public class TaskApplicationService {
     /** Toan bo don ung tuyen (moi trang thai) cua chinh Tasker dang goi - dung cho man "Viec da nhan". */
     @Transactional(readOnly = true)
     public List<MyApplicationResponse> listMyApplications(UUID taskerId) {
-        List<TaskApplication> applications = applicationRepository.findByTaskerIdOrderByCreatedAtDesc(taskerId);
+        List<TaskApplication> applications = applicationRepository.findByTaskerIdAndExternalInviteRefIsNullOrderByCreatedAtDesc(taskerId);
         if (applications.isEmpty()) {
             return List.of();
         }
@@ -417,7 +417,7 @@ public class TaskApplicationService {
     @Transactional(readOnly = true)
     public List<TaskApplicationResponse> listApplicantsForOwner(UUID posterId, UUID taskId) {
         requireOwnedTask(posterId, taskId);
-        return applicationRepository.findByTaskId(taskId).stream().map(this::toApplicationResponse).toList();
+        return applicationRepository.findByTaskIdAndExternalInviteRefIsNull(taskId).stream().map(this::toApplicationResponse).toList();
     }
 
     /**

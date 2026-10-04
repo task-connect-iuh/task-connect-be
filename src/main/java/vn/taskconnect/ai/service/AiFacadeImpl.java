@@ -8,9 +8,13 @@ import org.springframework.stereotype.Service;
 import vn.taskconnect.ai.api.AiFacade;
 import vn.taskconnect.ai.api.dto.CategoryClassificationRequest;
 import vn.taskconnect.ai.api.dto.CategoryClassificationResult;
+import vn.taskconnect.ai.api.dto.ImageTaskSuggestionRequest;
+import vn.taskconnect.ai.api.dto.ImageTaskSuggestionResult;
+import vn.taskconnect.ai.api.dto.RefineDescriptionRequest;
 import vn.taskconnect.ai.api.dto.SuggestionReasonRequest;
 import vn.taskconnect.ai.api.dto.SuggestionReasonResult;
 import vn.taskconnect.ai.infrastructure.GeminiEmbeddingClient;
+import vn.taskconnect.ai.infrastructure.GeminiVisionClient;
 import vn.taskconnect.ai.infrastructure.GroqChatClient;
 
 /**
@@ -26,12 +30,14 @@ class AiFacadeImpl implements AiFacade {
 
     private final GeminiEmbeddingClient embeddingClient;
     private final GroqChatClient chatClient;
+    private final GeminiVisionClient visionClient;
     private final QuotaTrackerService quotaTracker;
 
     AiFacadeImpl(GeminiEmbeddingClient embeddingClient, GroqChatClient chatClient,
-            QuotaTrackerService quotaTracker) {
+            GeminiVisionClient visionClient, QuotaTrackerService quotaTracker) {
         this.embeddingClient = embeddingClient;
         this.chatClient = chatClient;
+        this.visionClient = visionClient;
         this.quotaTracker = quotaTracker;
     }
 
@@ -79,6 +85,39 @@ class AiFacadeImpl implements AiFacade {
             return Optional.of(chatClient.classifyTaskCategory(request));
         } catch (RuntimeException ex) {
             log.warn("Goi Groq phan loai category that bai, tra ve rong de nguoi goi tu fallback: {}", ex.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /** Kiem tra quota vision rieng truoc, goi GeminiVisionClient, nuot moi loi va log warn thay vi nem ra. */
+    @Override
+    public Optional<ImageTaskSuggestionResult> suggestTaskFromImage(ImageTaskSuggestionRequest request) {
+        if (!quotaTracker.tryConsumeVisionQuota()) {
+            log.warn("Da het quota Gemini Vision trong ngay - bo qua phan tich anh, tra ve rong.");
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(visionClient.suggestTaskFromImage(request));
+        } catch (RuntimeException ex) {
+            log.warn("Goi Gemini Vision that bai, tra ve rong de nguoi goi tu fallback: {}", ex.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /** Kiem tra quota truoc (dung chung quota LLM voi generateSuggestionReasons/classifyTaskCategory), goi GroqChatClient, nuot moi loi. */
+    @Override
+    public Optional<String> refineTaskDescription(RefineDescriptionRequest request) {
+        if (request.answers().isEmpty()) {
+            return Optional.empty();
+        }
+        if (!quotaTracker.tryConsumeLlmQuota()) {
+            log.warn("Da het quota LLM trong ngay - bo qua viet lai mo ta, tra ve rong.");
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(chatClient.refineDescription(request));
+        } catch (RuntimeException ex) {
+            log.warn("Goi Groq viet lai mo ta that bai, tra ve rong de nguoi goi tu fallback: {}", ex.getMessage());
             return Optional.empty();
         }
     }

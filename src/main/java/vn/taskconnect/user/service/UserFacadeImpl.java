@@ -125,9 +125,8 @@ class UserFacadeImpl implements UserFacade {
                     .toList();
             candidates.add(new TaskerMatchCandidateSummary(
                     skill.getAccountId(), skill.getCategoryId(), skill.getVerificationStatus(), profile.getKycStatus(),
-                    skill.getPriceMin(), skill.getPriceMax(), skill.getYearsExperience(),
-                    profile.getLocationLat(), profile.getLocationLng(), profile.getPreferredRadiusKm(),
-                    profile.getBio(), slots));
+                    skill.getYearsExperience(), profile.getLocationLat(), profile.getLocationLng(),
+                    profile.getPreferredRadiusKm(), profile.getBio(), slots));
         }
         return candidates;
     }
