@@ -20,8 +20,6 @@ public record SuggestedTaskerResponse(
         List<String> concerns,
         boolean lowConfidence,
         double distanceKm,
-        Long priceMin,
-        Long priceMax,
         // Luon la 0 o dot nay - module Booking/Review chua ton tai nen chua co du lieu "viec
         // da hoan thanh" that su de dem. Khong bia so, xem plan da duyet muc bang doi chieu FE.
         int completedJobsNearby

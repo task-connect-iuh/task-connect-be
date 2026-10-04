@@ -33,6 +33,17 @@ public interface TaskFacade {
     void assignTask(UUID taskId, UUID posterId);
 
     /**
+     * Tao 1 dong task_applications "vo chua" (status ACCEPTED, externalInviteRef = inviteId) chi
+     * de co applicationId hop le cho ChatFacade mo kenh chat - dung boi Matching ngay sau
+     * assignTask() khi Tasker chap nhan mot loi moi AI goi y (TaskerInviteService.accept()),
+     * dac ta theo yeu cau nguoi dung "mo chat khi nhan loi moi" (xem
+     * PROGRESS-AI-MATCHING-MODULE.md). Dong nay bi loai khoi listApplicantsForOwner/
+     * listMyApplications (externalInviteRef != null) - KHONG phai mot don ung tuyen thuc su,
+     * khong di qua cac gate cua invite()/apply(). Tra ve id cua dong vua tao.
+     */
+    UUID createAcceptedApplicationForExternalInvite(UUID taskId, UUID taskerId, UUID inviteId);
+
+    /**
      * Thong tin 2 ben (Poster/Tasker) cua 1 don ung tuyen, dung boi Chat de kiem tra quyen xem
      * kenh va dung cho Inbox. Rong neu applicationId khong ton tai.
      */

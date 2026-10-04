@@ -149,40 +149,28 @@ public class TaskerMatchingService {
                 .orElse(false);
     }
 
-    /** Tinh structuredScore cho mot ung vien theo 4 tieu chi da chot trong plan (khoang cach/gia/kinh nghiem/lich ranh). */
+    /**
+     * Tinh structuredScore cho mot ung vien theo 3 tieu chi da chot (khoang cach/kinh
+     * nghiem/lich ranh). Gia KHONG con la tieu chi cham diem - moi Task co mot khoang gia
+     * rieng (budgetAmount) nen khong the so sanh cheo giua cac ung vien theo cach cu, xem plan
+     * da duyet "bo tieu chi gia khoi goi y AI". Gia van hien thi tren FE de Poster tu tham
+     * khao (SuggestedTaskerResponse), chi khong dung de xep hang nua.
+     */
     private RankedCandidate toStructured(TaskSummary task, TaskerMatchCandidateSummary candidate) {
         double distanceKm = GeoUtils.distanceKm(task.lat(), task.lng(), candidate.locationLat(), candidate.locationLng());
         int radiusForScoring = candidate.preferredRadiusKm() != null ? candidate.preferredRadiusKm() : DEFAULT_SCORING_RADIUS_KM;
         double distanceScore = Math.max(0.0, 1.0 - (distanceKm / Math.max(1, radiusForScoring)));
 
-        double priceScore = priceScore(task.budgetAmount(), candidate.priceMin(), candidate.priceMax());
         double experienceScore = Math.min(1.0, candidate.yearsExperience() / (double) EXPERIENCE_SCORE_CAP_YEARS);
         Boolean availabilityMatches = availabilityMatches(task.scheduledAt(), candidate.availability());
         double availabilityScore = availabilityMatches == null ? 0.5 : (availabilityMatches ? 1.0 : 0.2);
 
         MatchingProperties.Weights w = properties.weights();
-        double structuredScore = w.distance() * distanceScore + w.price() * priceScore
+        double structuredScore = w.distance() * distanceScore
                 + w.experience() * experienceScore + w.availability() * availabilityScore;
 
-        return new RankedCandidate(candidate.accountId(), distanceKm, candidate.priceMin(), candidate.priceMax(),
+        return new RankedCandidate(candidate.accountId(), distanceKm,
                 candidate.yearsExperience(), availabilityMatches, structuredScore, null, structuredScore);
-    }
-
-    /**
-     * 1.0 neu budget nam trong [priceMin, priceMax] cua Tasker, giam dan neu lech ra ngoai.
-     * Trung lap (0.5 - neutral) neu thieu du lieu mot phia (Task khong ghi budget hoac Tasker
-     * chua khai gia) - khong the ket luan hop/khong hop, khong phat/thuong sai.
-     */
-    private double priceScore(Long budget, Long priceMin, Long priceMax) {
-        if (budget == null || priceMin == null || priceMax == null) {
-            return 0.5;
-        }
-        if (budget >= priceMin && budget <= priceMax) {
-            return 1.0;
-        }
-        long distanceOutside = budget < priceMin ? (priceMin - budget) : (budget - priceMax);
-        long range = Math.max(1, priceMax - priceMin);
-        return Math.max(0.0, 1.0 - (distanceOutside / (double) range));
     }
 
     /**
@@ -269,9 +257,8 @@ public class TaskerMatchingService {
         double semanticScore = cosineSimilarity(taskVector, taskerVector);
         double semanticWeight = properties.weights().semantic();
         double finalScore = (1 - semanticWeight) * candidate.structuredScore() + semanticWeight * semanticScore;
-        return new RankedCandidate(candidate.accountId(), candidate.distanceKm(), candidate.priceMin(),
-                candidate.priceMax(), candidate.yearsExperience(), candidate.availabilityMatches(),
-                candidate.structuredScore(), semanticScore, finalScore);
+        return new RankedCandidate(candidate.accountId(), candidate.distanceKm(), candidate.yearsExperience(),
+                candidate.availabilityMatches(), candidate.structuredScore(), semanticScore, finalScore);
     }
 
     /** Cosine similarity co ban, gia tri trong [-1, 1] - dung 0 cho vector 0-do dai de tranh chia cho 0. */

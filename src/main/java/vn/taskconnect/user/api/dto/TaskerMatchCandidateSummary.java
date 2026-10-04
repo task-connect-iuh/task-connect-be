@@ -9,7 +9,7 @@ import vn.taskconnect.user.api.SkillVerificationStatus;
 
 /**
  * Ho so mot Tasker ung vien cho mot nhom dich vu, dung boi module Matching de loc/tinh diem
- * cau truc (khoang cach, gia, kinh nghiem, lich ranh) khi goi y Tasker cho mot Task - xem
+ * cau truc (khoang cach, kinh nghiem, lich ranh) khi goi y Tasker cho mot Task - xem
  * {@link vn.taskconnect.user.api.UserFacade#findMatchCandidates(UUID)}. Gop du lieu tu ba
  * bang cua module User (user_profiles, user_tasker_skill_profiles, user_tasker_availability)
  * thanh mot DTO phang de Matching khong phai goi facade nhieu lan cho tung bang.
@@ -21,8 +21,6 @@ import vn.taskconnect.user.api.SkillVerificationStatus;
  *                  verificationStatus (do la xac minh ho so ky nang, gan voi tung category).
  *                  Dung de loc "Xem them" (mo rong pham vi tim kiem) chi goi y nguoi da xac
  *                  minh danh tinh, xem TaskerMatchingService.rankCandidates(expand).
- * @param priceMin gia toi thieu Tasker chao cho category nay, null neu khong khai bao
- * @param priceMax gia toi da Tasker chao cho category nay, null neu khong khai bao
  * @param yearsExperience so nam kinh nghiem Tasker tu khai cho category nay
  * @param locationLat vi do hoat dong cua Tasker, null neu chua khai bao toa do
  * @param locationLng kinh do hoat dong cua Tasker, null neu chua khai bao toa do
@@ -35,8 +33,6 @@ public record TaskerMatchCandidateSummary(
         UUID categoryId,
         SkillVerificationStatus verificationStatus,
         KycStatus kycStatus,
-        Long priceMin,
-        Long priceMax,
         int yearsExperience,
         BigDecimal locationLat,
         BigDecimal locationLng,

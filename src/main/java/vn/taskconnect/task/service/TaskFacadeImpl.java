@@ -95,6 +95,15 @@ class TaskFacadeImpl implements TaskFacade {
         }
     }
 
+    @Override
+    @Transactional
+    public UUID createAcceptedApplicationForExternalInvite(UUID taskId, UUID taskerId, UUID inviteId) {
+        TaskApplication application = TaskApplication.createForExternalInvite(UUID.randomUUID(), taskId, taskerId,
+                inviteId, clock.instant());
+        applicationRepository.save(application);
+        return application.getId();
+    }
+
     /** Anh xa Task sang TaskSummary voi day du truong Matching can (xem Javadoc TaskSummary). */
     private TaskSummary toSummary(Task task) {
         return new TaskSummary(task.getId(), task.getPosterId(), task.getCategoryId(), task.getStatus(),

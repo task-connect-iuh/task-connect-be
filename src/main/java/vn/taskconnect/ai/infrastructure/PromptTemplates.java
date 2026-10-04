@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 import vn.taskconnect.ai.api.dto.CategoryClassificationRequest;
+import vn.taskconnect.ai.api.dto.ClarifyingAnswerInput;
+import vn.taskconnect.ai.api.dto.RefineDescriptionRequest;
 import vn.taskconnect.ai.api.dto.SuggestionReasonRequest;
 
 /**
@@ -127,6 +129,137 @@ public class PromptTemplates {
                     .append(candidate.name()).append("\", mo ta=\"").append(candidate.contextText()).append("\"\n");
         }
         sb.append("\nMO TA CONG VIEC CAN PHAN LOAI:\n").append(request.description());
+        return sb.toString();
+    }
+
+    /**
+     * Dung prompt tieng Viet gui kem anh cho Gemini Vision de sinh tieu de + mo ta cong viec,
+     * phan loai category goi y, VA (khi mo ta CHUA DU CU THE) sinh toi da 3 cau hoi lam ro cho
+     * Poster - tat ca trong CUNG mot lan goi (xem Javadoc ImageTaskSuggestionResult).
+     *
+     * <p>QUAN TRONG (chot voi nguoi dung 2026-09-29, sua lai sau khi test that): cau hoi lam ro
+     * la HAI dieu kien DOC LAP voi phan loai category, khong phai mot - giong bac si hoi benh
+     * nhan them du trieu chung ro (dieu kien DU) du da biet benh nhan den vi khoa nao (dieu kien
+     * CAN). "category.outcome=CATEGORY" (da khop ro nhom dich vu) KHONG co nghia mo ta da du
+     * chi tiet de Tasker bao gia - vd anh chup dong ho nuoc co the de dang xac dinh category
+     * "Cap thoat nuoc", nhung mo ta van co the qua chung ("co su co lien quan den dong ho nuoc")
+     * khong noi ro su co GI. Hai truong hop can phan biet ro:
+     * - Category ro + mo ta ro rang mot su co cu the (vd "ri nuoc o chan voi") -> KHONG can hoi
+     *   gi them, clarifyingQuestions RONG, du outcome co la CATEGORY hay OTHER.
+     * - Category ro HAY khong ro, nhung mo ta CHUNG CHUNG/khong neu duoc mot su co cu the (chi
+     *   mo ta hinh dang thiet bi chung) -> VAN can hoi them, bat ke category co khop hay khong.
+     * Ly do can hoi them: anh chi chup duoc TRIEU CHUNG be mat (vd mat dong ho, vet uot), khong
+     * chup duoc NGUYEN NHAN/dien bien an sau (vd dong ho chay nhanh bat thuong, ong ngam vo) -
+     * chi nguoi tai hien truong (Poster) moi biet, AI khong the "doan gioi hon anh cho phep".
+     * KHONG yeu cau phat hien SUSPICIOUS o day - kiem duyet noi dung van la trach nhiem cua
+     * buildCategoryClassificationPrompt() chay lai tren mo ta cuoi cung luc submit.
+     */
+    public String buildImageTaskSuggestionPrompt(List<CategoryClassificationRequest.CandidateCategory> candidates) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Ban la tro ly dang viec cua TaskConnect, nen tang ket noi Tasker (tho sua dien ")
+                .append("nuoc) voi Task Poster (nguoi thue). Nhiem vu: nhin buc anh dinh kem, mo ta ")
+                .append("tinh trang/su co dang thay trong anh, roi goi y tieu de + mo ta chi tiet bang ")
+                .append("TIENG VIET de Poster dung dang cong viec, va phan loai vao 1 trong 2 truong ")
+                .append("hop lien quan den danh sach danh muc ung vien ben duoi.\n\n")
+                .append("QUY TAC BAT BUOC:\n")
+                .append("1. CHI mo ta nhung gi THAT SU quan sat duoc trong anh (vd loai thiet bi, dau ")
+                .append("hieu hu hong ro rang nhu ri nuoc/chay den/nut vo). KHONG bia them chi tiet ")
+                .append("khong the nhin thay trong anh (vd nguyen nhan, thoi gian hu, thuong hieu neu ")
+                .append("khong doc duoc chu tren anh).\n")
+                .append("2. VAN PHONG: viet title/description theo DUNG giong dieu cua chinh Poster ")
+                .append("(nguoi can thue tho) dang tu ke lai van de nha minh gap - KHONG viet nhu bao ")
+                .append("cao kiem tra ky thuat/nhan vien quan sat hien truong. Cam cac cum tu may moc ")
+                .append("kieu 'Quan sat thay...', 'Ghi nhan tinh trang...', 'Can tho den kiem tra tinh ")
+                .append("trang hoat dong hoac xu ly su co lien quan den...'.\n")
+                .append("VI DU KHONG duoc viet (qua may moc, nghe nhu robot/bao cao): 'Quan sat thay mat ")
+                .append("dong ho do nuoc mau xanh hien thi cac con so va kim chi. Can tho den kiem tra ")
+                .append("tinh trang hoat dong hoac xu ly su co lien quan den dong ho nuoc.'\n")
+                .append("NEN viet the nay (tu nhien, giong nguoi thuc su dang can sua): 'Dong ho nuoc nha ")
+                .append("minh co ve chay khong binh thuong, kim nhay lien tuc du nha khong dung nuoc may. ")
+                .append("Minh can tho kiem tra lai xem dong ho co bi loi hay ro ri cho nao khong.'\n")
+                .append("3. Neu anh khong the hien ro mot su co/cong viec can lam (vd anh mo, khong ")
+                .append("lien quan dien-nuoc), van tra ve title/description mo ta trung thuc nhung gi ")
+                .append("thay duoc, KHONG tu suy dien mot su co khong co that.\n")
+                .append("4. Kiem tra DANH SACH DANH MUC UNG VIEN (DOC LAP voi buoc 5 ve cau hoi lam ro ")
+                .append("ben duoi - hai buoc nay KHONG phu thuoc nhau). Neu anh khop ro mot danh muc, ")
+                .append("tra ve outcome=\"CATEGORY\", candidateId=id danh muc do (dung id trong danh ")
+                .append("sach, khong bia them), confidence=do tin cay 0-100. Neu KHONG khop ro danh ")
+                .append("muc nao, tra ve outcome=\"OTHER\", candidateId=null, confidence=0.\n")
+                .append("5. CAU HOI LAM RO (clarifyingQuestions): danh gia RIENG xem description vua ")
+                .append("viet o buoc 2 co NEU RO duoc MOT su co/trieu chung cu the chua (vd 'ri nuoc o ")
+                .append("chan voi', 'kim dong ho chay lien tuc du khong dung nuoc', 'o cam bi chay den') ")
+                .append("hay van con CHUNG CHUNG (vd chi mo ta hinh dang/vi tri thiet bi ma KHONG neu ")
+                .append("duoc su co gi dang xay ra). Neu description DA neu ro mot su co cu the, tra ve ")
+                .append("clarifyingQuestions=mang RONG [] - KHONG can hoi gi them, BAT KE outcome o ")
+                .append("buoc 4 la CATEGORY hay OTHER. Neu description CON CHUNG CHUNG, sinh toi da 3 ")
+                .append("cau hoi lam ro trong clarifyingQuestions - moi cau hoi ve MOT chi tiet cu the ")
+                .append("chi nguoi dang o hien truong moi quan sat/biet duoc (vd am thanh nghe duoc, ")
+                .append("thoi diem bat dau, dien bien theo thoi gian, hoa don dien/nuoc thay doi), ")
+                .append("KHONG hoi lai nhung gi anh da the hien ro, KHONG hoi chung chung kieu 'ban co ")
+                .append("the mo ta them khong'.\n")
+                .append("6. Moi phan tu trong clarifyingQuestions la object {\"key\": string ngan 2-5 tu ")
+                .append("tom tat chu de cau hoi, PHAI co day du dau tieng Viet giong het nhu \"text\" ")
+                .append("(vd \"Tiếng nước chảy\", KHONG duoc viet \"Tieng nuoc chay\" khong dau), \"text\": ")
+                .append("cau hoi day du bang tieng Viet tu nhien lich su, co dau day du (vd \"Khi khoa het ")
+                .append("voi roi, ban co con nghe tieng nuoc chay duoi san khong?\" phai viet thanh \"Khi ")
+                .append("khoá hết vòi rồi, bạn có còn nghe tiếng nước chảy dưới sàn không?\"), \"placeholder\": ")
+                .append("vi du cau tra loi ngan co dau day du de goi y cach tra loi (vd \"Vd: Có, ban đêm ")
+                .append("nghe rõ lắm\")}. TOAN BO ba truong key/text/placeholder BAT BUOC co dau tieng ")
+                .append("Viet day du, khong duoc viet khong dau o bat ky truong nao.\n")
+                .append("7. Tra ve DUY NHAT mot object JSON, khong kem giai thich, khong kem markdown ")
+                .append("code fence, khong kem van ban nao khac ngoai JSON. Dinh dang bat buoc: ")
+                .append("{\"title\": string, \"description\": string, \"category\": {\"outcome\": ")
+                .append("string, \"candidateId\": string hoac null, \"confidence\": number, ")
+                .append("\"suspiciousReason\": null}, \"clarifyingQuestions\": [{\"key\": string, ")
+                .append("\"text\": string, \"placeholder\": string}, ...]}. suspiciousReason LUON LUON ")
+                .append("null o day.\n\n")
+                .append("DANH SACH DANH MUC UNG VIEN:\n");
+        for (int i = 0; i < candidates.size(); i++) {
+            CategoryClassificationRequest.CandidateCategory candidate = candidates.get(i);
+            sb.append(i + 1).append(". id=\"").append(candidate.candidateId()).append("\", ten=\"")
+                    .append(candidate.name()).append("\", mo ta=\"").append(candidate.contextText()).append("\"\n");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Dung prompt tieng Viet gui cho Groq de gop mo ta goc + cac cau tra loi lam ro (xem
+     * ClarifyingAnswerInput) thanh MOT doan mo ta tu nhien, chuyen nghiep de Tasker hieu dung
+     * cong viec can lam - thay vi Poster tu doc cau tra loi tho ghep tho "{key}: {answer}".
+     * Tra ve PLAIN TEXT (khong phai JSON) vi ket qua chi la mot chuoi mo ta duy nhat.
+     */
+    public String buildRefineDescriptionPrompt(RefineDescriptionRequest request) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Ban la tro ly dang viec cua TaskConnect, nen tang ket noi Tasker (tho sua dien ")
+                .append("nuoc) voi Task Poster (nguoi thue). Poster da viet mo ta ban dau, roi tra loi ")
+                .append("them mot vai cau hoi lam ro chi tiet. Nhiem vu: viet lai thanh MOT doan mo ta ")
+                .append("hoan chinh, mach lac bang TIENG VIET co dau day du, gop ca mo ta ban dau va cac ")
+                .append("chi tiet moi tra loi vao lam mot, de Tasker doc hieu ngay tinh trang/su co can ")
+                .append("xu ly.\n\n")
+                .append("QUY TAC BAT BUOC:\n")
+                .append("1. CHI duoc dung thong tin co trong mo ta ban dau va cac cau tra loi duoi day. ")
+                .append("CAM bia them chi tiet, nguyen nhan, hay so lieu khong co trong input. Cau tra ")
+                .append("loi nao de trong hoac khong ro nghia thi BO QUA, khong dua vao mo ta.\n")
+                .append("2. VAN PHONG: viet theo giong dieu Poster (nguoi can thue tho) tu ke lai van ")
+                .append("de nha minh gap, TU NHIEN nhu nguoi that dang mo ta - KHONG viet nhu bao cao ")
+                .append("ky thuat. Duoc phep sap xep lai cau chu cho mach lac hon, SUA chinh ta/dau cau ")
+                .append("tieng Viet neu Poster go thieu dau hoac viet tat, nhung KHONG doi nghia cau ")
+                .append("tra loi.\n")
+                .append("3. Ket qua la MOT doan van xuoi lien mach (khong gach dau dau, khong danh so, ")
+                .append("khong nhan lai cau hoi), do dai vua phai (khoang 2-5 cau).\n")
+                .append("4. CHI tra ve DUY NHAT doan mo ta dang plain text, KHONG kem giai thich, KHONG ")
+                .append("kem markdown, KHONG kem dau ngoac kep bao quanh ca doan.\n\n")
+                .append("MO TA BAN DAU:\n")
+                .append(request.originalDescription() == null || request.originalDescription().isBlank()
+                        ? "(Poster chua viet gi)" : request.originalDescription())
+                .append("\n\nCAU HOI LAM RO VA TRA LOI CUA POSTER:\n");
+        List<ClarifyingAnswerInput> answers = request.answers();
+        for (int i = 0; i < answers.size(); i++) {
+            ClarifyingAnswerInput answer = answers.get(i);
+            sb.append(i + 1).append(". Hoi: ").append(answer.questionText())
+                    .append(" | Tra loi: ").append(answer.answer()).append("\n");
+        }
+        sb.append("\nHay viet lai thanh mot doan mo ta hoan chinh theo dung quy tac da neu.");
         return sb.toString();
     }
 }

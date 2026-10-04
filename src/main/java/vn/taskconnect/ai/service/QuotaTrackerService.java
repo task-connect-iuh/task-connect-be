@@ -7,8 +7,8 @@ import org.springframework.stereotype.Service;
 import vn.taskconnect.ai.infrastructure.AiProperties;
 
 /**
- * Bo dem so luot goi Gemini/Groq trong ngay, tach rieng cho embedding va LLM vi hai
- * provider co quota doc lap nhau. Luu hoan toan trong bo nho (AtomicInteger + LocalDate
+ * Bo dem so luot goi Gemini/Groq trong ngay, tach rieng cho embedding, LLM, va vision vi ba
+ * endpoint co quota doc lap nhau. Luu hoan toan trong bo nho (AtomicInteger + LocalDate
  * cho ngay reset gan nhat) - KHONG ben vung qua Redis/DB, se reset ve 0 moi khi app restart.
  * Chap nhan duoc voi quy mo do an: so luot goi that su rat nho (vai chuc/ngay), muc dich
  * chinh cua bo dem nay la chan tran quota mien phi cua provider, khong phai bao toan tuyet
@@ -21,10 +21,12 @@ class QuotaTrackerService {
 
     private final AtomicInteger embeddingCount = new AtomicInteger(0);
     private final AtomicInteger llmCount = new AtomicInteger(0);
+    private final AtomicInteger visionCount = new AtomicInteger(0);
     private final Clock clock;
 
     private LocalDate embeddingResetDate;
     private LocalDate llmResetDate;
+    private LocalDate visionResetDate;
 
     QuotaTrackerService(AiProperties properties, Clock clock) {
         this.properties = properties;
@@ -32,6 +34,7 @@ class QuotaTrackerService {
         LocalDate today = LocalDate.now(clock);
         this.embeddingResetDate = today;
         this.llmResetDate = today;
+        this.visionResetDate = today;
     }
 
     /**
@@ -58,7 +61,17 @@ class QuotaTrackerService {
         return true;
     }
 
-    /** Ve 0 ca hai bo dem neu ngay hien tai da sang ngay moi so voi lan reset gan nhat. */
+    /** Tuong tu tryConsumeEmbeddingQuota() nhung cho quota Gemini Vision rieng biet. */
+    synchronized boolean tryConsumeVisionQuota() {
+        resetIfNewDay();
+        if (visionCount.get() >= properties.vision().dailyQuota()) {
+            return false;
+        }
+        visionCount.incrementAndGet();
+        return true;
+    }
+
+    /** Ve 0 ca ba bo dem neu ngay hien tai da sang ngay moi so voi lan reset gan nhat. */
     private void resetIfNewDay() {
         LocalDate today = LocalDate.now(clock);
         if (!today.equals(embeddingResetDate)) {
@@ -68,6 +81,10 @@ class QuotaTrackerService {
         if (!today.equals(llmResetDate)) {
             llmCount.set(0);
             llmResetDate = today;
+        }
+        if (!today.equals(visionResetDate)) {
+            visionCount.set(0);
+            visionResetDate = today;
         }
     }
 }

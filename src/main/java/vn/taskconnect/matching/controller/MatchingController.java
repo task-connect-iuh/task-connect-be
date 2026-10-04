@@ -78,6 +78,14 @@ public class MatchingController {
                 "Đã từ chối lời mời này.");
     }
 
+    /** Toan bo loi moi (moi trang thai) Poster da gui cho mot Task - dung de FE seed lai trang thai nut "Mời"/so da moi khi vao lai trang. */
+    @GetMapping("/{taskId}/invites")
+    @PreAuthorize("hasRole('TASK_POSTER')")
+    public ApiResponse<List<TaskerInviteResponse>> getTaskInvites(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID taskId) {
+        return ApiResponse.ok(inviteService.listInvitesForTask(principal.accountId(), taskId));
+    }
+
     /** Toan bo loi moi (moi trang thai) ma chinh Tasker dang goi da nhan duoc - man "Loi moi ban nhan duoc". */
     @GetMapping("/invites/mine")
     @PreAuthorize("hasRole('TASKER')")

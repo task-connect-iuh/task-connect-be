@@ -9,8 +9,6 @@ import java.util.UUID;
  *
  * @param accountId id tai khoan Tasker
  * @param distanceKm khoang cach haversine tu Tasker toi dia diem Task, don vi km
- * @param priceMin gia toi thieu Tasker chao cho category nay, null neu khong khai bao
- * @param priceMax gia toi da Tasker chao cho category nay, null neu khong khai bao
  * @param yearsExperience so nam kinh nghiem Tasker tu khai
  * @param availabilityMatches true neu Tasker co khung gio ranh khop dung thu/gio cua
  *                             Task.scheduledAt, false neu co khai bao lich nhung khong khop
@@ -24,8 +22,6 @@ import java.util.UUID;
 record RankedCandidate(
         UUID accountId,
         double distanceKm,
-        Long priceMin,
-        Long priceMax,
         int yearsExperience,
         Boolean availabilityMatches,
         double structuredScore,
