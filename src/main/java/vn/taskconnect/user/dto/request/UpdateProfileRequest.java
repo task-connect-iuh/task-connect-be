@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import vn.taskconnect.user.api.AvailabilityMode;
 import vn.taskconnect.user.api.LocationType;
 
 /**
@@ -33,6 +34,7 @@ public record UpdateProfileRequest(
         @Min(1) @Max(50) Integer preferredRadiusKm,
         LocationType locationType,
         @Size(max = 500) String arrivalNotes,
-        List<UUID> jobCategoryIds
+        List<UUID> jobCategoryIds,
+        AvailabilityMode availabilityMode
 ) {
 }

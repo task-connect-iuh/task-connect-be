@@ -3,6 +3,7 @@ package vn.taskconnect.chat.controller;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -12,11 +13,17 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import vn.taskconnect.chat.api.InboxTab;
+import vn.taskconnect.chat.dto.request.AddReactionRequest;
+import vn.taskconnect.chat.dto.request.ChatAttachmentUploadUrlRequest;
 import vn.taskconnect.chat.dto.request.CreatePriceProposalRequest;
 import vn.taskconnect.chat.dto.request.CreateRescheduleProposalRequest;
+import vn.taskconnect.chat.dto.request.SendAttachmentMessageRequest;
 import vn.taskconnect.chat.dto.request.SendTextMessageRequest;
+import vn.taskconnect.chat.dto.response.ChatApplicationStatusResponse;
+import vn.taskconnect.chat.dto.response.ChatAttachmentUploadUrlResponse;
 import vn.taskconnect.chat.dto.response.ChatInboxItemResponse;
 import vn.taskconnect.chat.dto.response.ChatMessageResponse;
+import vn.taskconnect.chat.dto.response.TaskEditDiffResponse;
 import vn.taskconnect.chat.service.ChatService;
 import vn.taskconnect.common.response.ApiResponse;
 import vn.taskconnect.security.jwt.AuthenticatedPrincipal;
@@ -40,7 +47,57 @@ public class ChatController {
     @PostMapping("/applications/{applicationId}/messages")
     public ApiResponse<ChatMessageResponse> sendTextMessage(@AuthenticationPrincipal AuthenticatedPrincipal principal,
             @PathVariable UUID applicationId, @Valid @RequestBody SendTextMessageRequest request) {
-        return ApiResponse.ok(chatService.sendTextMessage(applicationId, principal.accountId(), request.text()));
+        return ApiResponse.ok(chatService.sendTextMessage(applicationId, principal.accountId(), request.text(),
+                request.replyToMessageId()));
+    }
+
+    /** Xin 1 presigned PUT URL de tu tai 1 anh/video/file dinh kem len S3 (them 2026-09-26). */
+    @PostMapping("/applications/{applicationId}/attachment-upload-url")
+    public ApiResponse<ChatAttachmentUploadUrlResponse> createAttachmentUploadUrl(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID applicationId,
+            @Valid @RequestBody ChatAttachmentUploadUrlRequest request) {
+        return ApiResponse.ok(chatService.createAttachmentUploadUrl(applicationId, principal.accountId(), request));
+    }
+
+    /** Tao 1 tin nhan IMAGE/FILE/VIDEO sau khi client da PUT xong tung file len S3 (them 2026-09-26). */
+    @PostMapping("/applications/{applicationId}/attachment-messages")
+    public ApiResponse<ChatMessageResponse> sendAttachmentMessage(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID applicationId,
+            @Valid @RequestBody SendAttachmentMessageRequest request) {
+        return ApiResponse.ok(chatService.sendAttachmentMessage(applicationId, principal.accountId(), request));
+    }
+
+    /** Chinh nguoi gui Thu hoi 1 tin nhan TEXT/IMAGE/FILE/VIDEO cua minh, trong han thoi gian cho phep (them 2026-09-26). */
+    @PostMapping("/applications/{applicationId}/messages/{messageId}/recall")
+    public ApiResponse<ChatMessageResponse> recallMessage(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @PathVariable UUID applicationId, @PathVariable UUID messageId) {
+        return ApiResponse.ok(chatService.recallMessage(applicationId, messageId, principal.accountId()),
+                "Đã thu hồi tin nhắn.");
+    }
+
+    /** Tha/doi/bo (toggle) 1 emoji tren 1 tin nhan (them 2026-09-26). */
+    @PostMapping("/applications/{applicationId}/messages/{messageId}/reactions")
+    public ApiResponse<ChatMessageResponse> reactToMessage(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @PathVariable UUID applicationId, @PathVariable UUID messageId,
+            @Valid @RequestBody AddReactionRequest request) {
+        return ApiResponse.ok(
+                chatService.reactToMessage(applicationId, messageId, principal.accountId(), request.emoji()));
+    }
+
+    /** Ghim 1 tin nhan vao kenh - ca hai ben deu ghim duoc, toi da N tin dong thoi (them 2026-09-26). */
+    @PostMapping("/applications/{applicationId}/messages/{messageId}/pin")
+    public ApiResponse<ChatMessageResponse> pinMessage(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @PathVariable UUID applicationId, @PathVariable UUID messageId) {
+        return ApiResponse.ok(chatService.pinMessage(applicationId, messageId, principal.accountId()),
+                "Đã ghim tin nhắn.");
+    }
+
+    /** Bo ghim 1 tin nhan - ca hai ben deu bo ghim duoc (them 2026-09-26). */
+    @DeleteMapping("/applications/{applicationId}/messages/{messageId}/pin")
+    public ApiResponse<ChatMessageResponse> unpinMessage(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @PathVariable UUID applicationId, @PathVariable UUID messageId) {
+        return ApiResponse.ok(chatService.unpinMessage(applicationId, messageId, principal.accountId()),
+                "Đã bỏ ghim tin nhắn.");
     }
 
     /** Toan bo lich su tin nhan cua kenh thuoc 1 application - rong neu kenh chua ton tai. */
@@ -48,6 +105,26 @@ public class ChatController {
     public ApiResponse<List<ChatMessageResponse>> listMessages(
             @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID applicationId) {
         return ApiResponse.ok(chatService.listMessages(applicationId, principal.accountId()));
+    }
+
+    /** Chi tiet thay doi cua 1 SYSTEM message bao "Poster vừa cập nhật thông tin công việc" (UC07). */
+    @GetMapping("/applications/{applicationId}/messages/{messageId}/task-edit")
+    public ApiResponse<TaskEditDiffResponse> getTaskEditOfMessage(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID applicationId,
+            @PathVariable UUID messageId) {
+        return ApiResponse.ok(chatService.getTaskEditOfMessage(applicationId, messageId, principal.accountId()));
+    }
+
+    /**
+     * Trang thai application + task cha cho 1 applicationId, KHONG doi hoi kenh chat da ton tai -
+     * FE goi khi mo mot cuoc tro chuyen chua tung co kenh (khong nam trong Inbox) de biet truoc
+     * co nen chan gui/hien thong bao "khong the bat dau hoi thoai" hay khong (xem Javadoc
+     * ChatService.getApplicationChatStatus).
+     */
+    @GetMapping("/applications/{applicationId}/status")
+    public ApiResponse<ChatApplicationStatusResponse> getApplicationChatStatus(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID applicationId) {
+        return ApiResponse.ok(chatService.getApplicationChatStatus(applicationId, principal.accountId()));
     }
 
     /** Danh sach Inbox cua tai khoan dang goi, loc theo 1 trong 4 tab (dac ta muc 10). */

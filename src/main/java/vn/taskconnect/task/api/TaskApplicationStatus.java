@@ -12,6 +12,10 @@ package vn.taskconnect.task.api;
  * REJECTED cung la gia tri CU, duoc GIU LAI theo quyet dinh cua nguoi dung (khac REJECTED_AUTO
  * - REJECTED la Poster chu dong tu choi 1 ung vien khi task con mo, REJECTED_AUTO la he thong
  * tu dong tu choi cac ung vien con lai khi UC11 chon xong nguoi thang).
+ * CANCELLED va TIME_CHANGED_NEEDS_RECONFIRM la 2 gia tri moi cho UC07 (Poster huy/sua viec da
+ * dang, xem V44__extend_task_application_status_for_cancel_and_time_change.sql) - them moi
+ * hoan toan, KHONG tai su dung NEEDS_RECONFIRM du ten nghe tuong tu, vi gia tri do da la "chet"
+ * va mang y nghia lich su khac (cascade UC11 truoc khi co REJECTED_AUTO).
  */
 public enum TaskApplicationStatus {
     PENDING,
@@ -23,5 +27,9 @@ public enum TaskApplicationStatus {
     WITHDRAWN,
     REJECTED_AUTO,
     DECLINED,
-    INVITE_EXPIRED
+    INVITE_EXPIRED,
+    /** Poster huy ca cong viec khi con OPEN/PENDING_REVIEW (UC07) - cong viec khong con ton tai. */
+    CANCELLED,
+    /** Poster doi scheduledAt luc don dang PENDING (UC07 Tier 3) - Tasker phai xac nhan lai hoac rut. */
+    TIME_CHANGED_NEEDS_RECONFIRM
 }

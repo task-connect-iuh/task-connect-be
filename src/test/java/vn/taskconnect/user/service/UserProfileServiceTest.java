@@ -59,7 +59,7 @@ class UserProfileServiceTest {
     private static UpdateProfileRequest requestOf(String fullName, String avatarUrl, String addressText, String bio,
             String operatingArea, BigDecimal lat, BigDecimal lng, Integer preferredRadiusKm) {
         return new UpdateProfileRequest(fullName, avatarUrl, addressText, bio, operatingArea, lat, lng,
-                preferredRadiusKm, null, null, null);
+                preferredRadiusKm, null, null, null, null);
     }
 
     // UC03-01: PATCH lan dau, du truong bat buoc -> tao moi ho so.
@@ -111,7 +111,7 @@ class UserProfileServiceTest {
         UserProfile existing = new UserProfile(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", "Quan 7",
                 FIXED_NOW.minusSeconds(3600));
         existing.updateDetails("Nguyen Van A", "old-avatar.png", "123 Le Loi", null, "Quan 7",
-                BigDecimal.valueOf(10.75), BigDecimal.valueOf(106.66), null, null, null, FIXED_NOW.minusSeconds(3600));
+                BigDecimal.valueOf(10.75), BigDecimal.valueOf(106.66), null, null, null, null, FIXED_NOW.minusSeconds(3600));
         when(repository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(existing));
         when(repository.save(any(UserProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -149,7 +149,7 @@ class UserProfileServiceTest {
         UserProfile existing = new UserProfile(UUID.randomUUID(), ACCOUNT_ID, "Nguyen Van A", "Quan 7",
                 originalUpdatedAt);
         existing.updateDetails("Nguyen Van A", "avatar.png", "123 Le Loi", null, "Quan 7",
-                BigDecimal.valueOf(10.75), BigDecimal.valueOf(106.66), null, null, null, originalUpdatedAt);
+                BigDecimal.valueOf(10.75), BigDecimal.valueOf(106.66), null, null, null, null, originalUpdatedAt);
         when(repository.findByAccountId(ACCOUNT_ID)).thenReturn(Optional.of(existing));
 
         UpdateProfileRequest emptyRequest = requestOf(null, null, null, null, null, null, null);

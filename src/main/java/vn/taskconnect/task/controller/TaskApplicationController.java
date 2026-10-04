@@ -15,29 +15,43 @@ import org.springframework.web.bind.annotation.RestController;
 import vn.taskconnect.common.response.ApiResponse;
 import vn.taskconnect.security.jwt.AuthenticatedPrincipal;
 import vn.taskconnect.task.dto.request.ApplyToTaskRequest;
+import vn.taskconnect.task.dto.request.ConfirmApplicationRequest;
+import vn.taskconnect.task.dto.request.ExtraCostImageUploadUrlRequest;
 import vn.taskconnect.task.dto.request.InquireRequest;
 import vn.taskconnect.task.dto.request.InviteTaskerRequest;
+import vn.taskconnect.task.dto.request.SubmitExtraCostBatchRequest;
 import vn.taskconnect.task.dto.response.ConfirmApplicationResponse;
+import vn.taskconnect.task.dto.response.ExtraCostImageUploadUrlResponse;
+import vn.taskconnect.task.dto.response.ExtraCostMoneySummaryResponse;
 import vn.taskconnect.task.dto.response.MyApplicationResponse;
 import vn.taskconnect.task.dto.response.TaskApplicationResponse;
 import vn.taskconnect.task.dto.response.TaskFeedItemResponse;
 import vn.taskconnect.task.dto.response.TaskPriceHistoryEntryResponse;
 import vn.taskconnect.task.service.TaskApplicationService;
+import vn.taskconnect.task.service.TaskExtraCostImageUploadService;
+import vn.taskconnect.task.service.TaskExtraCostService;
 
 /**
  * Endpoint tim/ung tuyen cong viec (UC10, phia Tasker) va Poster xac nhan ung vien (UC11, gioi
  * han doi trang thai Task/Application - chua tao Booking that, xem
  * docs/TASK-MODULE-SPLIT.md). File rieng voi TaskController.java (phia Poster dang/xem viec
- * cua minh) de tranh dung cham, cung mot module vn.taskconnect.task.
+ * cua minh) de tranh dung cham, cung mot module vn.taskconnect.task. Tu 2026-10-02 them cac
+ * endpoint "Chi phi phat sinh" (xem TaskExtraCostService) - chung mot controller vi cung xoay
+ * quanh 1 applicationId da duoc chon o UC11, giong price-history.
  */
 @RestController
 @RequestMapping("/api/v1/tasks")
 public class TaskApplicationController {
 
     private final TaskApplicationService applicationService;
+    private final TaskExtraCostService extraCostService;
+    private final TaskExtraCostImageUploadService extraCostImageUploadService;
 
-    public TaskApplicationController(TaskApplicationService applicationService) {
+    public TaskApplicationController(TaskApplicationService applicationService,
+            TaskExtraCostService extraCostService, TaskExtraCostImageUploadService extraCostImageUploadService) {
         this.applicationService = applicationService;
+        this.extraCostService = extraCostService;
+        this.extraCostImageUploadService = extraCostImageUploadService;
     }
 
     /** Feed cong viec dang mo cho Tasker duyet, loc tuy chon theo danh muc va tu khoa. Khong hien viec do chinh tai khoan nay dang (vai tro Poster). */
@@ -84,6 +98,19 @@ public class TaskApplicationController {
     }
 
     /**
+     * Tasker bam "Van nhan viec" sau khi Poster doi "Thoi gian mong muon" cua cong viec (UC07
+     * Tier 3) - don dang TIME_CHANGED_NEEDS_RECONFIRM tro ve PENDING.
+     */
+    @PostMapping("/{taskId}/applications/{applicationId}/reconfirm")
+    @PreAuthorize("hasRole('TASKER')")
+    public ApiResponse<TaskApplicationResponse> reconfirmAfterTimeChange(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID taskId,
+            @PathVariable UUID applicationId) {
+        return ApiResponse.ok(applicationService.reconfirmAfterTimeChange(principal.accountId(), taskId, applicationId),
+                "Đã xác nhận vẫn nhận công việc này.");
+    }
+
+    /**
      * Tasker bam "Ung tuyen" tu the "Dang hoi them" - chuyen thang 1 don dang INQUIRING thanh
      * PENDING, khong bat buoc phai thuong luong gia truoc trong chat (xem Javadoc
      * TaskApplicationService.applyFromInquiry()).
@@ -125,14 +152,17 @@ public class TaskApplicationController {
     }
 
     /**
-     * UC11 "Chon nguoi nay" - tao booking-lite that, cac ung vien con lai cua task chuyen
-     * REJECTED_AUTO kem dong kenh chat. Xem Javadoc TaskApplicationService.confirm().
+     * UC11 "Chon nguoi nay" - tao booking-lite that VA giu tien thuc te (gia lap) theo
+     * paymentMethod Poster chon, cac ung vien con lai cua task chuyen REJECTED_AUTO kem dong
+     * kenh chat. Xem Javadoc TaskApplicationService.confirm().
      */
     @PostMapping("/{taskId}/applications/{applicationId}/confirm")
     @PreAuthorize("hasRole('TASK_POSTER')")
     public ApiResponse<ConfirmApplicationResponse> confirm(@AuthenticationPrincipal AuthenticatedPrincipal principal,
-            @PathVariable UUID taskId, @PathVariable UUID applicationId) {
-        return ApiResponse.ok(applicationService.confirm(principal.accountId(), taskId, applicationId),
+            @PathVariable UUID taskId, @PathVariable UUID applicationId,
+            @Valid @RequestBody ConfirmApplicationRequest request) {
+        return ApiResponse.ok(
+                applicationService.confirm(principal.accountId(), taskId, applicationId, request.paymentMethod()),
                 "Đã chọn Tasker này cho công việc.");
     }
 
@@ -174,5 +204,74 @@ public class TaskApplicationController {
             @PathVariable UUID applicationId) {
         return ApiResponse.ok(applicationService.declineInvite(principal.accountId(), taskId, applicationId),
                 "Đã từ chối lời mời.");
+    }
+
+    /**
+     * Tong hop tien cua 1 application (chi phi chot ban dau + cac batch phat sinh + so sanh voi
+     * so dang tam giu) - ca Poster va Tasker cua don do xem duoc, khong @PreAuthorize theo role
+     * (kiem tra quyen o service, cung nguyen tac voi getPriceHistory).
+     */
+    @GetMapping("/applications/{applicationId}/extra-costs/summary")
+    public ApiResponse<ExtraCostMoneySummaryResponse> getExtraCostSummary(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID applicationId) {
+        return ApiResponse.ok(extraCostService.getSummary(principal.accountId(), applicationId));
+    }
+
+    /** Tasker dang 1 batch chi phi phat sinh moi - xem Javadoc TaskExtraCostService.submit(). */
+    @PostMapping("/applications/{applicationId}/extra-costs")
+    @PreAuthorize("hasRole('TASKER')")
+    public ApiResponse<ExtraCostMoneySummaryResponse> submitExtraCost(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID applicationId,
+            @Valid @RequestBody SubmitExtraCostBatchRequest request) {
+        return ApiResponse.ok(
+                extraCostService.submit(principal.accountId(), applicationId, request.note(), request.items()),
+                "Đã đăng chi phí phát sinh.");
+    }
+
+    /** Tasker tu thu hoi mot batch chi phi phat sinh do chinh minh dang, dang cho duyet. */
+    @PostMapping("/applications/{applicationId}/extra-costs/{batchId}/withdraw")
+    @PreAuthorize("hasRole('TASKER')")
+    public ApiResponse<ExtraCostMoneySummaryResponse> withdrawExtraCost(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID applicationId,
+            @PathVariable UUID batchId) {
+        return ApiResponse.ok(extraCostService.withdraw(principal.accountId(), applicationId, batchId),
+                "Đã thu hồi khoản chi phí phát sinh.");
+    }
+
+    /** Poster dong y mot batch chi phi phat sinh dang cho duyet. */
+    @PostMapping("/applications/{applicationId}/extra-costs/{batchId}/approve")
+    @PreAuthorize("hasRole('TASK_POSTER')")
+    public ApiResponse<ExtraCostMoneySummaryResponse> approveExtraCost(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID applicationId,
+            @PathVariable UUID batchId) {
+        return ApiResponse.ok(extraCostService.approve(principal.accountId(), applicationId, batchId),
+                "Đã đồng ý khoản chi phí phát sinh.");
+    }
+
+    /** Poster tu choi mot batch chi phi phat sinh dang cho duyet. */
+    @PostMapping("/applications/{applicationId}/extra-costs/{batchId}/reject")
+    @PreAuthorize("hasRole('TASK_POSTER')")
+    public ApiResponse<ExtraCostMoneySummaryResponse> rejectExtraCost(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID applicationId,
+            @PathVariable UUID batchId) {
+        return ApiResponse.ok(extraCostService.reject(principal.accountId(), applicationId, batchId),
+                "Đã từ chối khoản chi phí phát sinh.");
+    }
+
+    /** Poster bam "Nap" de nap them (gia lap) cho du so phai tra sau khi cac batch da duyet tang len. */
+    @PostMapping("/applications/{applicationId}/extra-costs/top-up")
+    @PreAuthorize("hasRole('TASK_POSTER')")
+    public ApiResponse<ExtraCostMoneySummaryResponse> topUpExtraCost(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID applicationId) {
+        return ApiResponse.ok(extraCostService.topUp(principal.accountId(), applicationId), "Đã nạp thêm.");
+    }
+
+    /** Xin presigned URL de Tasker tu tai 1 anh minh chung chi phi phat sinh len S3. */
+    @PostMapping("/applications/{applicationId}/extra-cost-images/upload-url")
+    @PreAuthorize("hasRole('TASKER')")
+    public ApiResponse<ExtraCostImageUploadUrlResponse> createExtraCostImageUploadUrl(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID applicationId,
+            @Valid @RequestBody ExtraCostImageUploadUrlRequest request) {
+        return ApiResponse.ok(extraCostImageUploadService.createUploadUrl(applicationId, request));
     }
 }

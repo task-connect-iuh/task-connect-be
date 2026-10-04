@@ -22,10 +22,19 @@ public class SystemParametersController {
         this.adminFacade = adminFacade;
     }
 
-    /** Doc 3 tham so hien can cho Chat/Task: ty le phi nen tang, gioi han moi dong thoi, thoi han het han loi moi. */
+    /**
+     * Doc cac tham so hien can cho Chat/Task: ty le phi nen tang, gioi han moi dong thoi, thoi
+     * han het han loi moi, va (them 2026-09-26) gioi han thu hoi/ghim/dinh kem cua chat.
+     */
     @GetMapping
     public ApiResponse<SystemParametersResponse> get() {
         return ApiResponse.ok(new SystemParametersResponse(adminFacade.getPlatformFeeRate(),
-                adminFacade.getMaxConcurrentInvitesPerTask(), adminFacade.getInviteExpiryHours()));
+                adminFacade.getMaxConcurrentInvitesPerTask(), adminFacade.getInviteExpiryHours(),
+                adminFacade.getChatMessageRecallWindowMinutes(), adminFacade.getChatMaxPinnedMessagesPerChannel(),
+                adminFacade.getChatImageMaxCountPerMessage(), adminFacade.getChatImageMaxSizeMb(),
+                adminFacade.getChatVideoMaxCountPerMessage(), adminFacade.getChatVideoMaxSizeMb(),
+                adminFacade.getChatVideoMaxDurationSeconds(), adminFacade.getChatFileMaxCountPerMessage(),
+                adminFacade.getChatFileMaxSizeMb(), adminFacade.getChatVoiceMaxDurationSeconds(),
+                adminFacade.getChatVoiceMaxSizeMb()));
     }
 }

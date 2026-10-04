@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.taskconnect.admin.api.AdminFacade;
 import vn.taskconnect.booking.api.BookingFacade;
+import vn.taskconnect.booking.api.PaymentMethod;
 import vn.taskconnect.booking.api.dto.BookingSummary;
 import vn.taskconnect.chat.api.ChatFacade;
 import vn.taskconnect.chat.api.ChatMessageType;
@@ -24,6 +25,7 @@ import vn.taskconnect.chat.api.ChatSystemMessages;
 import vn.taskconnect.chat.api.ProposalStatus;
 import vn.taskconnect.common.exception.BusinessException;
 import vn.taskconnect.common.exception.ErrorCode;
+import vn.taskconnect.task.api.TaskApplicationInitiator;
 import vn.taskconnect.task.api.TaskApplicationStatus;
 import vn.taskconnect.task.api.TaskStatus;
 import vn.taskconnect.task.dto.request.ApplyToTaskRequest;
@@ -143,14 +145,28 @@ public class TaskApplicationService {
      * tuyen viec cua chinh minh (CANNOT_APPLY_OWN_TASK), dang co don ACTIVE hoac tung bi
      * DECLINED/REJECTED cho cap task+tasker nay (xem requireNoBlockingApplication - tu Round B5
      * sua lai theo dac ta muc 8 ban cap nhat, khong con UNIQUE(task_id, tasker_id) o DB nua, xem
-     * V33__drop_unique_task_applications_task_tasker.sql).
+     * V33__drop_unique_task_applications_task_tasker.sql). Tu 2026-09-30 (yeu cau nguoi dung):
+     * Tasker chon "De nghi mot muc khac" o form ung tuyen (proposedPrice khac null) thi
+     * priceReason BAT BUOC (PRICE_REASON_REQUIRED neu rong) va don duoc mo kenh chat ngay kem 1
+     * PRICE_PROPOSAL, y het luong Poster moi truc tiep kem gia (xem invite() ben duoi) - don van
+     * PENDING binh thuong, KHONG cho vao proposedPrice (cot do chi phan anh gia da chot qua
+     * chat). Khong chon "De nghi mot muc khac" (proposedPrice null) thi giu nguyen luong cu,
+     * khong mo kenh chat gi ca.
      */
     @Transactional
     public TaskApplicationResponse apply(UUID taskerId, UUID taskId, ApplyToTaskRequest request) {
         requireOpenTaskForNewApplication(taskerId, taskId);
+        if (request.proposedPrice() != null && (request.priceReason() == null || request.priceReason().isBlank())) {
+            throw new BusinessException(ErrorCode.PRICE_REASON_REQUIRED);
+        }
         TaskApplication application = TaskApplication.submit(UUID.randomUUID(), taskId, taskerId,
                 request.proposedArrivalText(), request.message(), clock.instant());
         applicationRepository.save(application);
+        if (request.proposedPrice() != null) {
+            chatFacade.openChannelForApplyWithPriceProposal(application.getId(), taskerId,
+                    ChatSystemMessages.taskerAppliedWithPriceProposal(resolveDisplayName(taskerId)),
+                    request.proposedPrice(), request.priceReason(), clock.instant());
+        }
         return toApplicationResponse(application);
     }
 
@@ -176,7 +192,10 @@ public class TaskApplicationService {
     /**
      * Tasker tu rut mot don dang PENDING ("Rut ung tuyen") hoac INQUIRING ("Khong quan tam
      * nua") - dung chung 1 gia tri enum WITHDRAWN, chi khac SYSTEM message theo nguon goc (dac
-     * ta muc 5 bang o cuoi). Dong kenh chat neu da co (dac ta muc 6).
+     * ta muc 5 bang o cuoi). Dong kenh chat neu da co (dac ta muc 6). Cung cho phep rut tu
+     * TIME_CHANGED_NEEDS_RECONFIRM (UC07 Tier 3) - Tasker khong dong y gio moi Poster vua doi
+     * thi rut, dung chung SYSTEM message voi truong hop rut tu PENDING (ve ban chat van la
+     * "khong nhan viec nay nua").
      */
     @Transactional
     public TaskApplicationResponse withdraw(UUID taskerId, UUID taskId, UUID applicationId) {
@@ -184,15 +203,42 @@ public class TaskApplicationService {
                 .findByIdAndTaskIdAndTaskerId(applicationId, taskId, taskerId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.APPLICATION_NOT_FOUND));
         TaskApplicationStatus previousStatus = application.getStatus();
-        if (previousStatus != TaskApplicationStatus.PENDING && previousStatus != TaskApplicationStatus.INQUIRING) {
+        if (previousStatus != TaskApplicationStatus.PENDING && previousStatus != TaskApplicationStatus.INQUIRING
+                && previousStatus != TaskApplicationStatus.TIME_CHANGED_NEEDS_RECONFIRM) {
             throw new BusinessException(ErrorCode.APPLICATION_NOT_WITHDRAWABLE);
         }
         application.withdraw(clock.instant());
         String taskerName = resolveDisplayName(taskerId);
-        String systemMessage = previousStatus == TaskApplicationStatus.PENDING
-                ? ChatSystemMessages.taskerWithdrewApplication(taskerName)
-                : ChatSystemMessages.taskerStoppedInquiring(taskerName);
+        String systemMessage = previousStatus == TaskApplicationStatus.INQUIRING
+                ? ChatSystemMessages.taskerStoppedInquiring(taskerName)
+                : ChatSystemMessages.taskerWithdrewApplication(taskerName);
         chatFacade.closeChannelIfExists(applicationId, systemMessage);
+        return toApplicationResponse(application);
+    }
+
+    /**
+     * Tasker bam "Van nhan viec" sau khi Poster doi "Thoi gian mong muon" (UC07 Tier 3) - don
+     * tro ve PENDING, Poster lai chon duoc nguoi nay o UC11 nhu binh thuong. Chan: don khong
+     * thuoc ve taskerId nay hoac khong ton tai (APPLICATION_NOT_FOUND), don khong con dang
+     * TIME_CHANGED_NEEDS_RECONFIRM (APPLICATION_NOT_PENDING - tai su dung ma loi nay, y nghia
+     * chung la "don khong con o trang thai cho phep hanh dong nay"), task khong con OPEN (vd da
+     * bi Poster huy hoac giao cho Tasker khac trong luc dang cho xac nhan - TASK_NOT_OPEN).
+     */
+    @Transactional
+    public TaskApplicationResponse reconfirmAfterTimeChange(UUID taskerId, UUID taskId, UUID applicationId) {
+        TaskApplication application = applicationRepository
+                .findByIdAndTaskIdAndTaskerId(applicationId, taskId, taskerId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.APPLICATION_NOT_FOUND));
+        if (application.getStatus() != TaskApplicationStatus.TIME_CHANGED_NEEDS_RECONFIRM) {
+            throw new BusinessException(ErrorCode.APPLICATION_NOT_PENDING);
+        }
+        Task task = taskRepository.findById(taskId).orElseThrow(() -> new BusinessException(ErrorCode.TASK_NOT_FOUND));
+        if (task.getStatus() != TaskStatus.OPEN) {
+            throw new BusinessException(ErrorCode.TASK_NOT_OPEN);
+        }
+        application.reconfirmAfterTimeChange(clock.instant());
+        chatFacade.postSystemMessageIfOpen(applicationId,
+                ChatSystemMessages.taskerReconfirmedAfterTimeChange(resolveDisplayName(taskerId)));
         return toApplicationResponse(application);
     }
 
@@ -338,10 +384,13 @@ public class TaskApplicationService {
      * Tasker tu choi loi moi; REJECTED - Poster tu choi thu cong, quyet dinh nguoi dung
      * 2026-09-17 coi tuong duong DECLINED). Cac trang thai da ket thuc KHAC (WITHDRAWN,
      * REJECTED_AUTO, INVITE_EXPIRED) khong nam trong danh sach nay - khong chan gi ca.
+     * TIME_CHANGED_NEEDS_RECONFIRM them cho UC07 (Poster doi thoi gian mong muon) - don dang cho
+     * Tasker xac nhan lai van la 1 dong ACTIVE, khong the co dong thu 2 song song.
      */
     private static final Set<TaskApplicationStatus> BLOCKING_APPLICATION_STATUSES = EnumSet.of(
             TaskApplicationStatus.PENDING, TaskApplicationStatus.INQUIRING, TaskApplicationStatus.INVITED,
-            TaskApplicationStatus.DECLINED, TaskApplicationStatus.REJECTED);
+            TaskApplicationStatus.DECLINED, TaskApplicationStatus.REJECTED,
+            TaskApplicationStatus.TIME_CHANGED_NEEDS_RECONFIRM);
 
     /**
      * Dieu kien chung truoc khi tao 1 don ung tuyen moi (du la apply() hay createInquiry()):
@@ -400,6 +449,8 @@ public class TaskApplicationService {
                 .map(app -> {
                     Task task = taskById.get(app.getTaskId());
                     String posterName = posterNameById.computeIfAbsent(task.getPosterId(), this::resolveDisplayName);
+                    Long agreedPriceAmount = priceSnapshotFor(app.getId(), app.getTaskerId()).agreedAmount();
+                    boolean hasBooking = bookingFacade.findByApplicationId(app.getId()).isPresent();
                     return new MyApplicationResponse(app.getId(), app.getStatus(), app.getInitiatedBy(),
                             app.getExpiresAt(), app.getProposedArrivalText(),
                             app.getMessage(), app.getCreatedAt(), app.getRespondedAt(), task.getId(), task.getTitle(),
@@ -408,7 +459,7 @@ public class TaskApplicationService {
                             task.getLat(), task.getLng(), task.getBudgetAmount(), task.getScheduledAt(),
                             task.getStatus(), task.getCategoryId(),
                             categoryNameById.get(task.getCategoryId()), posterName,
-                            imageUrlsByTaskId.getOrDefault(task.getId(), List.of()));
+                            imageUrlsByTaskId.getOrDefault(task.getId(), List.of()), agreedPriceAmount, hasBooking);
                 })
                 .toList();
     }
@@ -433,10 +484,14 @@ public class TaskApplicationService {
      * 2026-09-21: kenh cua chinh ung vien THANG cung nhan 1 SYSTEM message rieng
      * (taskerConfirmed(), lazy-create kenh neu chua tung chat gi) - truoc day chi cac ung vien
      * THUA moi co thong bao, ben thang khong biet gi ca cho toi khi tu load lai (xem
-     * docs/PROGRESS-CHAT-MODULE.md). Kenh nay KHONG dong (con "Dang thuc hien").
+     * docs/PROGRESS-CHAT-MODULE.md). Kenh nay KHONG dong (con "Dang thuc hien"). Tu 2026-10-02
+     * (quyet dinh nguoi dung) Poster bat buoc chon 1 PaymentMethod kem theo - BookingFacade dung
+     * gia tri nay de tinh so tien phai giu that (gia lap) qua PaymentFacade, xem Javadoc
+     * BookingFacade.createFromApplication().
      */
     @Transactional
-    public ConfirmApplicationResponse confirm(UUID posterId, UUID taskId, UUID applicationId) {
+    public ConfirmApplicationResponse confirm(UUID posterId, UUID taskId, UUID applicationId,
+            PaymentMethod paymentMethod) {
         Task task = requireOwnedTask(posterId, taskId);
         if (task.getStatus() != TaskStatus.OPEN) {
             throw new BusinessException(ErrorCode.TASK_ALREADY_ASSIGNED);
@@ -453,10 +508,16 @@ public class TaskApplicationService {
         if (feeBase == null) {
             throw new BusinessException(ErrorCode.MISSING_AGREED_PRICE);
         }
+        // Yeu cau nguoi dung 2026-09-30: "Chon nguoi nay" bat buoc phai co thoi gian mong muon -
+        // scheduledAt duoc dung lam initialScheduledAt cho Booking (dong tren) va la co so de
+        // Tasker biet luc nao phai co mat, de trong den luc nay la khong hop ly.
+        if (task.getScheduledAt() == null) {
+            throw new BusinessException(ErrorCode.MISSING_SCHEDULED_AT);
+        }
 
         Instant now = clock.instant();
         BookingSummary booking = bookingFacade.createFromApplication(applicationId, taskId, posterId,
-                target.getTaskerId(), feeBase, task.getScheduledAt());
+                target.getTaskerId(), feeBase, paymentMethod, task.getScheduledAt());
         task.assignTo(now);
         // THU TU QUAN TRONG (sua 2026-09-22): notifyApplicationConfirmed() chay TRUOC vi no
         // lazy-create kenh neu ung vien thang chua tung chat/de xuat gi truoc do (vd task co san
@@ -479,14 +540,24 @@ public class TaskApplicationService {
 
         long platformFee = computePlatformFee(feeBase);
         long payoutEstimate = feeBase - platformFee;
-        return new ConfirmApplicationResponse(toApplicationResponse(target), booking.id(), feeBase, platformFee,
-                payoutEstimate);
+        // escrowHeldAmount doc lai qua BookingFacade thay vi tinh lai o day - tranh lap logic
+        // tinh hold voi BookingFacadeImpl.computeHoldAmount() (nguon su that duy nhat cho cach
+        // tinh theo tung PaymentMethod).
+        long escrowHeldAmount = bookingFacade.getEscrowBreakdown(applicationId)
+                .map(summary -> summary.heldAmount()).orElse(0L);
+        return new ConfirmApplicationResponse(toApplicationResponse(target), booking.id(), feeBase,
+                booking.paymentMethod(), escrowHeldAmount, platformFee, payoutEstimate);
     }
 
-    /** Cac trang thai con "song" bi cuon vao REJECTED_AUTO khi UC11 chon xong nguoi thang (dac ta muc 5 so do). */
+    /**
+     * Cac trang thai con "song" bi cuon vao REJECTED_AUTO khi UC11 chon xong nguoi thang (dac ta
+     * muc 5 so do). TIME_CHANGED_NEEDS_RECONFIRM them cho UC07 - don dang cho Tasker xac nhan
+     * lai gio moi cung phai bi cuon, khong the "treo" mai sau khi task da ASSIGNED cho nguoi khac.
+     */
     private boolean isStillActiveForCascade(TaskApplicationStatus status) {
         return status == TaskApplicationStatus.PENDING || status == TaskApplicationStatus.INQUIRING
-                || status == TaskApplicationStatus.INVITED;
+                || status == TaskApplicationStatus.INVITED
+                || status == TaskApplicationStatus.TIME_CHANGED_NEEDS_RECONFIRM;
     }
 
     /**
@@ -540,35 +611,51 @@ public class TaskApplicationService {
         String taskerName = resolveDisplayName(application.getTaskerId());
         String taskerAvatarUrl = userFacade.findProfile(application.getTaskerId()).map(UserProfileSummary::avatarUrl)
                 .orElse(null);
-        PriceSnapshot price = priceSnapshotFor(application.getId());
+        PriceSnapshot price = priceSnapshotFor(application.getId(), application.getTaskerId());
+        boolean hasBooking = bookingFacade.findByApplicationId(application.getId()).isPresent();
         return new TaskApplicationResponse(application.getId(), application.getTaskerId(), taskerName,
                 taskerAvatarUrl, application.getProposedArrivalText(), application.getMessage(),
                 application.getStatus(), application.getInitiatedBy(), application.getExpiresAt(),
-                application.getCreatedAt(), application.getRespondedAt(), price.agreedAmount(), price.pendingAmount());
-    }
-
-    /** Gia da chot (neu co) va gia dang cho quyet dinh (neu co) cho 1 application - xem Javadoc TaskApplicationResponse. */
-    private record PriceSnapshot(Long agreedAmount, Long pendingAmount) {
+                application.getCreatedAt(), application.getRespondedAt(), price.agreedAmount(), price.pendingAmount(),
+                price.pendingProposalProposedBy(), hasBooking);
     }
 
     /**
-     * Doc task_price_history (module nay so huu) de suy ra 2 gia tri hien thi cho 1 application:
-     * "gia da chot" la dong ACCEPTED gan nhat (khong bao gio sai vi Dong y la hanh dong khong
-     * dao nguoc). "Gia dang cho" chi tin duoc SAU KHI da hoi ChatFacade.hasPendingProposal() -
-     * tu rieng bang nay khong the phan biet "dong NULL la dang cho" voi "dong NULL la tan du
-     * cua 1 lan Tu choi/Thu hoi truoc do" (ca 2 deu accepted_at NULL, xem Javadoc
-     * TaskPriceHistory). Neu dang co dung 1 de xuat PROPOSED (bat buoc theo dac ta), dong moi
-     * nhat trong bang chinh la de xuat do.
+     * Gia da chot (neu co), gia dang cho quyet dinh (neu co) va nguon goc de xuat dang cho (ai
+     * tao) cho 1 application - xem Javadoc TaskApplicationResponse.
      */
-    private PriceSnapshot priceSnapshotFor(UUID applicationId) {
+    private record PriceSnapshot(Long agreedAmount, Long pendingAmount,
+            TaskApplicationInitiator pendingProposalProposedBy) {
+    }
+
+    /**
+     * Doc task_price_history (module nay so huu) de suy ra cac gia tri hien thi cho 1
+     * application: "gia da chot" la dong ACCEPTED gan nhat (khong bao gio sai vi Dong y la hanh
+     * dong khong dao nguoc). "Gia dang cho" chi tin duoc SAU KHI da hoi
+     * ChatFacade.hasPendingProposal() - tu rieng bang nay khong the phan biet "dong NULL la dang
+     * cho" voi "dong NULL la tan du cua 1 lan Tu choi/Thu hoi truoc do" (ca 2 deu accepted_at
+     * NULL, xem Javadoc TaskPriceHistory). Neu dang co dung 1 de xuat PROPOSED (bat buoc theo dac
+     * ta), dong moi nhat trong bang chinh la de xuat do - tu do suy ra nguoi tao bang cach so sanh
+     * voi taskerId (trung la TASKER, khac la POSTER), chi de FE doi nhan/thong bao, KHONG dung de
+     * goi API accept/reject (hanh dong do van chi lam duoc trong khung chat, xem
+     * PriceProposalCard.tsx).
+     */
+    private PriceSnapshot priceSnapshotFor(UUID applicationId, UUID taskerId) {
         Long agreed = priceHistoryRepository
                 .findTopByApplicationIdAndAcceptedAtIsNotNullOrderByAcceptedAtDesc(applicationId)
                 .map(TaskPriceHistory::getAmount).orElse(null);
-        Long pending = chatFacade.hasPendingProposal(applicationId, ChatMessageType.PRICE_PROPOSAL)
-                ? priceHistoryRepository.findTopByApplicationIdOrderByCreatedAtDesc(applicationId)
-                        .map(TaskPriceHistory::getAmount).orElse(null)
-                : null;
-        return new PriceSnapshot(agreed, pending);
+        if (!chatFacade.hasPendingProposal(applicationId, ChatMessageType.PRICE_PROPOSAL)) {
+            return new PriceSnapshot(agreed, null, null);
+        }
+        TaskPriceHistory latest = priceHistoryRepository.findTopByApplicationIdOrderByCreatedAtDesc(applicationId)
+                .orElse(null);
+        if (latest == null) {
+            return new PriceSnapshot(agreed, null, null);
+        }
+        TaskApplicationInitiator proposedBy = latest.getCreatedByAccountId().equals(taskerId)
+                ? TaskApplicationInitiator.TASKER
+                : TaskApplicationInitiator.POSTER;
+        return new PriceSnapshot(agreed, latest.getAmount(), proposedBy);
     }
 
     /**

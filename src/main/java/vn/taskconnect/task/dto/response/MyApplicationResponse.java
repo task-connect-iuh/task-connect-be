@@ -19,7 +19,14 @@ import vn.taskconnect.user.api.LocationType;
  * ben Poster/feed. initiatedBy/expiresAt them tu Round B5 de FE dung cho tab "Loi moi"
  * (INVITED, initiatedBy=POSTER) kem dem nguoc het han.
  * phai goi them request rieng cho tung dong. taskLat/taskLng dung cho tinh nang "Chi duong"
- * (VietMap routing) o FE - xem DirectionsModal.tsx.
+ * (VietMap routing) o FE - xem DirectionsModal.tsx. agreedPriceAmount them (2026-09-28) de FE
+ * hien "Ban nhan duoc" (sau khi tru phi nen tang) dung gia THAT da chot qua chat neu co, thay vi
+ * chi uoc tinh tu taskBudgetAmount - cung cach tinh voi TaskApplicationResponse.agreedPriceAmount
+ * ben phia Poster (xem TaskApplicationService.priceSnapshotFor). hasBooking them cung ngay
+ * (2026-09-28) - don UNG VIEN THANG cua UC11 "Chon nguoi nay" GIU NGUYEN status=PENDING (khong
+ * chuyen ACCEPTED, xem Javadoc TaskApplicationService.confirm()), nen FE khong the dua vao status
+ * de biet da duoc chon hay chua; hasBooking (tu BookingFacade.findByApplicationId) moi la tin
+ * hieu dung, dung de FE chuyen the cong viec sang tab "Da nhan" thay vi "Cho xac nhan".
  */
 public record MyApplicationResponse(
         UUID applicationId,
@@ -46,6 +53,8 @@ public record MyApplicationResponse(
         UUID categoryId,
         String categoryName,
         String posterName,
-        List<String> taskImageUrls
+        List<String> taskImageUrls,
+        Long agreedPriceAmount,
+        boolean hasBooking
 ) {
 }

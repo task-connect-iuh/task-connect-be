@@ -35,6 +35,21 @@ public interface ChatFacade {
     void postSystemMessageIfOpen(UUID applicationId, String systemMessageBody);
 
     /**
+     * Nhu postSystemMessageIfOpen() nhung dinh kem id cua 1 su kien Poster sua cong viec (UC07)
+     * de FE hien nut "Xem chi tiết thay đổi" tren dung tin nay - dung boi Task.updateTask().
+     */
+    void postTaskEditSystemMessageIfOpen(UUID applicationId, String systemMessageBody, UUID taskEditEventId);
+
+    /**
+     * Gui 1 tin nhan EXTRA_COST_BATCH (the "Chi phí phát sinh" hien truc tiep trong khung chat,
+     * giong PRICE_PROPOSAL) vao kenh cua application neu dang OPEN - dung boi
+     * TaskExtraCostService.submit() ngay sau khi Tasker dang xong 1 batch (bo sung 2026-10-03,
+     * thay the cho 1 dong SYSTEM text truoc day). Khong lam gi neu chua co kenh hoac kenh da
+     * CLOSED.
+     */
+    void postExtraCostBatchMessageIfOpen(UUID applicationId, UUID taskerAccountId, UUID extraCostBatchId);
+
+    /**
      * Co ton tai 1 message dung loai (vd PRICE_PROPOSAL) dang PROPOSED (chua xu ly) cho
      * application nay khong - dung boi Task (proposePrice() de chan tao them de xuat moi, va
      * confirm() UC11 o Round B4 de khoa nut "Chon nguoi nay").
@@ -76,4 +91,15 @@ public interface ChatFacade {
      */
     void openChannelForInvite(UUID applicationId, UUID posterAccountId, String systemMessageBody,
             Long proposedAmount, String proposalNote, Instant now);
+
+    /**
+     * Tao kenh cho 1 don ung tuyen thang (UC10, yeu cau nguoi dung 2026-09-30) kem 1 SYSTEM
+     * message mo dau, va 1 PRICE_PROPOSAL (qua TaskFacade.proposePrice, giong het luong thuong
+     * luong gia binh thuong) vi Tasker luon dinh kem gia khi goi method nay - khac
+     * openChannelForInvite (proposedAmount o do co the null vi Poster khong bat buoc de nghi
+     * gia luc moi). Dung khi Tasker chon "De nghi mot muc khac" o form Gui ung tuyen thay vi
+     * chap nhan nguyen ngan sach nguoi dang dua ra.
+     */
+    void openChannelForApplyWithPriceProposal(UUID applicationId, UUID taskerAccountId, String systemMessageBody,
+            long proposedAmount, String proposalNote, Instant now);
 }
